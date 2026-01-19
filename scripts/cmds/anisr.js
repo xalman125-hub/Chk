@@ -35,7 +35,7 @@ module.exports = {
      const videoPath = path.join(__dirname, "cache", `anisr_${Date.now()}.mp4`);
      fs.ensureDirSync(path.join(__dirname, "cache"));
 
-     try { api.setMessageReaction("🔍", event.messageID, () => {}, true); } catch (e) {}
+     try { api.setMessageReaction("⏳", event.messageID, () => {}, true); } catch (e) {}
 
      try {
       const base = await baseApiUrl();
@@ -46,17 +46,11 @@ module.exports = {
       const writer = fs.createWriteStream(videoPath);
       res.data.pipe(writer);
 
-      await new Promise((resolve, reject) => {
-        writer.on("finish", resolve);
-        writer.on("error", reject);
-      });
+      await new Promise((resolve, reject) => { writer.on("finish", resolve);  writer.on("error", reject);});
+      if (fs.statSync(videoPath).size < 100) { throw new Error("File empty");
+     }
 
-      if (fs.statSync(videoPath).size < 100) {
-          throw new Error("File empty");
-      }
-
-      await message.reply({
-        body: `• 𝐇𝐞𝐫𝐞'𝐬 𝐲𝐨𝐮𝐫 𝐚𝐧𝐢𝐦𝐞 𝐯𝐢𝐝𝐞𝐨 <😘\n• 𝐒𝐞𝐚𝐫𝐜𝐡: ${kw}`,
+      await message.reply({ body: `• 𝐇𝐞𝐫𝐞'𝐬 𝐲𝐨𝐮𝐫 𝐚𝐧𝐢𝐦𝐞 𝐯𝐢𝐝𝐞𝐨 <😘\n• 𝐒𝐞𝐚𝐫𝐜𝐡: ${kw}`,
         attachment: fs.createReadStream(videoPath)
       });
 
