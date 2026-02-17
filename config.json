@@ -20,15 +20,6 @@
 "adminBot": [
     "100037951718438"
   ],
-  "devUser": [
-    "100037951718438"
-  ],
-  "vipUser": [
-    "100037951718438"
-  ],
-  "nsfwUser": [
-    "100037951718438"
-  ],
   "whiteListMode": {
     "enable": false,
     "whiteListIds": [],
