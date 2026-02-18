@@ -725,7 +725,7 @@ async function startBot(loginWithEmail) {
 			log.info("BOT ID", `${global.botID} - ${await getName(global.botID)}`);
 			log.info("PREFIX", global.GoatBot.config.prefix);
 			log.info("LANGUAGE", global.GoatBot.config.language);
-			log.info("BOT NICK NAME", global.GoatBot.config.nickNameBot || "GOAT BOT");
+			log.info("BOT NICK NAME", global.GoatBot.config.nickNameBot || "HINATA BOT");
 // ———————————————————— GBAN ————————————————————— //
 let dataGban;
 
