@@ -19,15 +19,18 @@
 
 ---
 
-## 🌟 **Features**
-* **Multi-Language Support:** Full support for 🇧🇩 Bangla, 🇺🇸 English, and 🇻🇳 Vietnamese.
+## • **Features**
+* **Multi-Language Support:** Full support for
+* 🇧🇩 Bangla,
+* 🇺🇸 English,
+* 🇻🇳 Vietnamese.
 * **High Performance:** Built on Node.js 20.x for stability.
 * **Auto-Reply:** Advanced SimSimi and AI integration.
 * **Easy Setup:** Mobile-friendly deployment process.
 
 ---
 
-## 🌍 **Language Selection / ভাষা নির্বাচন**
+## • **Language Selection / ভাষা নির্বাচন**
 You can switch the bot's response language in the `config.json` file.
 আপনি `config.json` ফাইলে গিয়ে ভাষা পরিবর্তন করতে পারেন।
 
@@ -39,7 +42,7 @@ You can switch the bot's response language in the `config.json` file.
 
 ---
 
-## 📝 **Tutorial & Deployment**
+## • **Tutorial & Deployment**
 If you are a new user, please watch the step-by-step video guide below to set up your bot on a mobile phone.
 
 🎥 **Watch Tutorial:** [Click Here to Watch on YouTube](https://youtu.be/zJsemXLaRbY?si=f0PE6L4oCGzYBwPn)
