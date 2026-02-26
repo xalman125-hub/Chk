@@ -1,88 +1,63 @@
-const axios = require("axios");
-
-const getBase = async () => {
-        const res = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
-        return res.data.mahmud;
-};
-
 module.exports = {
-        config: {
-                name: "catbox",
-                aliases: ["cb"],
-                version: "1.7",
-                author: "MahMUD",
-                countDown: 10,
-                role: 0,
-                description: {
-                        bn: "যেকোনো মিডিয়া ফাইলকে লিঙ্কে রূপান্তর করুন",
-                        en: "Convert any media file into a link",
-                        vi: "Chuyển đổi bất kỳ tệp phương tiện nào thành liên kết"
-                },
-                category: "tools",
-                guide: {
-                        bn: '   {pn}: যেকোনো ছবি/ভিডিওতে রিপ্লাই দিয়ে ব্যবহার করুন',
-                        en: '   {pn}: Reply to any image/video to get the link',
-                        vi: '   {pn}: Phản hồi bất kỳ ảnh/video nào để lấy liên kết'
-                }
-        },
+    config: {
+        name: "catbox",
+        aliases: ["cb"],
+        version: "6.7",
+        author: "xalman",
+        countDown: 5,
+        role: 0,
+        category: "media",
+        guide: { en: "{pn} [reply/image/video]" }
+    },
 
-        langs: {
-                bn: {
-                        noMedia: "🐤 | বেবি, একটি ছবি বা ভিডিওতে রিপ্লাই দাও! 🖼️",
-                        uploading: "⌛ | আপলোড হচ্ছে, একটু অপেক্ষা করো বেবি... <😘",
-                        success: "Successfully Uploaded ✅\n\n🔗 𝐔𝐑𝐋: %1",
-                        error: "× সমস্যা হয়েছে: %1। প্রয়োজনে Contact MahMUD।"
-                },
-                en: {
-                        noMedia: "🐤 | Baby, please reply to a media file (image/video)! 🖼️",
-                        uploading: "⌛ | Uploading, please wait a moment baby... <😘",
-                        success: "Successfully Uploaded ✅\n\n🔗 𝐔𝐑𝐋: %1",
-                        error: "× API error: %1. Contact MahMUD for help."
-                },
-                vi: {
-                        noMedia: "🐤 | Cưng ơi, vui lòng phản hồi một tệp ảnh hoặc video! 🖼️",
-                        uploading: "⌛ | Đang tải lên, chờ chút nhé cưng... <😘",
-                        success: "Tải lên thành công ✅\n\n🔗 𝐔𝐑𝐋: %1",
-                        error: "× Lỗi: %1. Liên hệ MahMUD để hỗ trợ."
-                }
-        },
+    onStart: async function ({ event, api, message }) {
+        const axios = require("axios");
+        const fs = require("fs-extra");
+        const FormData = require("form-data");
+        const path = require("path");
 
-        onStart: async function ({ api, event, message, getLang }) {
-                const authorName = String.fromCharCode(77, 97, 104, 77, 85, 68);
-                if (this.config.author !== authorName) {
-                        return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
-                }
-
-                if (event.type !== "message_reply" || !event.messageReply.attachments.length) {
-                        return message.reply(getLang("noMedia"));
-                }
-
-                try {
-                        api.setMessageReaction("⌛", event.messageID, () => {}, true);
-                        const waitMsg = await message.reply(getLang("uploading"));
-
-                        const attachmentUrl = encodeURIComponent(event.messageReply.attachments[0].url);
-                        const baseUrl = await getBase();
-                        const apiUrl = `${baseUrl.replace(/\/$/, "")}/api/catbox?url=${attachmentUrl}`;
-
-                        const response = await axios.get(apiUrl, { timeout: 100000 });
-
-                        if (response.data.status && response.data.link) {
-                                if (waitMsg?.messageID) api.unsendMessage(waitMsg.messageID);
-                                
-                                return message.reply({
-                                        body: getLang("success", response.data.link)
-                                }, () => {
-                                        api.setMessageReaction("✅", event.messageID, () => {}, true);
-                                });
-                        } else {
-                                throw new Error("API response status is false.");
-                        }
-
-                } catch (err) {
-                        console.error("Catbox Error:", err);
-                        api.setMessageReaction("❌", event.messageID, () => {}, true);
-                        return message.reply(getLang("error", err.message));
-                }
+        const { messageReply, messageID } = event;
+        const attachment = messageReply?.attachments[0] || event.attachments[0];
+        
+        if (!attachment) {
+            return message.reply("⚠️ দয়া করে একটি ছবি বা ভিডিওতে রিপ্লাই দিন!");
         }
+
+        api.setMessageReaction("⏳", messageID, () => {}, true);
+
+        const ext = attachment.type === "video" ? ".mp4" : (attachment.type === "animated_image" ? ".gif" : ".jpg");
+        const tempPath = path.join(__dirname, `nx_temp_${Date.now()}${ext}`);
+
+        try {
+            const github_raw_url = "https://raw.githubusercontent.com/goatbotnx/Sexy-nx2.0Updated/refs/heads/main/nx-apis.json";
+            const configRes = await axios.get(github_raw_url);
+            const base_url = configRes.data.catbox;
+
+            if (!base_url) throw new Error("API URL not found in GitHub config.");
+            
+            const nx_api_url = base_url.endsWith('/upload') ? base_url : `${base_url.replace(/\/$/, "")}/upload`;
+
+            const response = await axios.get(attachment.url, { responseType: "arraybuffer" });
+            fs.writeFileSync(tempPath, Buffer.from(response.data));
+
+            const form = new FormData();
+            form.append("fileToUpload", fs.createReadStream(tempPath));
+
+            const uploadRes = await axios.post(nx_api_url, form, {
+                headers: { ...form.getHeaders() },
+                maxContentLength: Infinity,
+                maxBodyLength: Infinity
+            });
+
+            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+            
+            api.setMessageReaction("✅", messageID, () => {}, true);
+            return message.reply(uploadRes.data);
+
+        } catch (err) {
+            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+            api.setMessageReaction("❌", messageID, () => {}, true);
+            return message.reply("❌ Error: " + (err.response?.data || err.message));
+        }
+    }
 };

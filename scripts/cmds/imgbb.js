@@ -1,81 +1,87 @@
-const axios = require("axios");
-
-const getBase = async () => {
-        const res = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
-        return res.data.mahmud;
-};
+const axios = require('axios');
+const FormData = require('form-data');
+const path = require('path');
 
 module.exports = {
-        config: {
-                name: "imgbb",
-                version: "1.7",
-                author: "MahMUD",
-                countDown: 10,
-                role: 0,
-                description: {
-                        bn: "যেকোনো মিডিয়া ফাইলকে লিঙ্কে রূপান্তর করুন",
-                        en: "Convert any media file into a URL link",
-                        vi: "Chuyển đổi bất kỳ tệp phương tiện nào thành liên kết URL"
-                },
-                category: "tools",
-                guide: {
-                        bn: '   {pn} [রিপ্লাই মিডিয়া]: ফাইল লিঙ্কে রূপান্তর করতে রিপ্লাই দিন',
-                        en: '   {pn} [reply media]: Reply to a file to get the link',
-                        vi: '   {pn} [phản hồi phương tiện]: Phản hồi một tệp để lấy liên kết'
-                }
-        },
+  config: {
+    name: "imgbb",
+    aliases: ["i", "ibb", "upload"],
+    version: "3.2",
+    author: "xalman",
+    countDown: 5,
+    role: 0,
+    shortDescription: "Convert image to link",
+    longDescription: "Uploads a replied image to ImgBB and returns a direct link.",
+    category: "image"
+  },
 
-        langs: {
-                bn: {
-                        noMedia: "× বেবি, একটি ছবি বা ভিডিওতে রিপ্লাই দাও! 🐤",
-                        success: "• 𝐔𝐩𝐥𝐨𝐚𝐝𝐞𝐝 𝐒𝐮𝐜𝐜𝐞𝐬𝐬 ✅\n• 𝐔𝐑𝐋: %1",
-                        error: "× সমস্যা হয়েছে: %1। প্রয়োজনে Contact MahMUD।"
-                },
-                en: {
-                        noMedia: "× Baby, please reply to a media file (image/video)! 🐤",
-                        success: "• 𝐔𝐩𝐥𝐨𝐚𝐝𝐞𝐝 𝐒𝐮𝐜𝐜𝐞𝐬𝐬 ✅\n• 𝐔𝐑𝐋: %1",
-                        error: "× API error: %1. Contact MahMUD for help."
-                },
-                vi: {
-                        noMedia: "× Cưng ơi, hãy phản hồi một tệp phương tiện! 🐤",
-                        success: "• 𝐔𝐩𝐥𝐨𝐚𝐝 𝐭𝐡𝐚̀𝐧𝐡 𝐜𝐨̂𝐧𝐠 ✅\n• 𝐋𝐢𝐞̂𝐧 𝐤𝐞̂́𝐭: %1",
-                        error: "× Lỗi: %1. Liên hệ MahMUD để hỗ trợ."
-                }
-        },
+  onStart: async function ({ api, event, message }) {
+    const { messageID, type, messageReply } = event;
 
-        onStart: async function ({ api, event, message, getLang }) {
-                const authorName = String.fromCharCode(77, 97, 104, 77, 85, 68);
-                if (this.config.author !== authorName) {
-                        return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
-                }
+    if (
+      type !== "message_reply" ||
+      !messageReply.attachments ||
+      messageReply.attachments.length === 0
+    ) {
+      return message.reply("❌ Please reply to an image or gif.");
+    }
 
-                if (event.type !== "message_reply" || !event.messageReply.attachments.length) {
-                        return message.reply(getLang("noMedia"));
-                }
+    const attachment = messageReply.attachments[0];
 
-                try {
-                         api.setMessageReaction("⌛", event.messageID, () => {}, true);
+    if (
+      !attachment.type ||
+      !["photo", "animated_image"].includes(attachment.type)
+    ) {
+      return message.reply("❌ Only image or gif files are supported.");
+    }
 
-                        const attachmentUrl = encodeURIComponent(event.messageReply.attachments[0].url);
-                        const baseUrl = await getBase();
-                        const apiUrl = `${baseUrl.replace(/\/$/, "")}/api/imgbb?url=${attachmentUrl}`;
+    const imageUrl = attachment.url;
 
-                        const response = await axios.get(apiUrl, { timeout: 100000 });
+    let fileExt = path.extname(imageUrl.split("?")[0]);
+    if (!fileExt) {
+      fileExt = attachment.type === "animated_image" ? ".gif" : ".jpg";
+    }
 
-                        if (response.data.status && response.data.link) {
-                                return message.reply({
-                                        body: getLang("success", response.data.link)
-                                }, () => {
-                                        api.setMessageReaction("✅", event.messageID, () => {}, true);
-                                });
-                        } else {
-                                throw new Error("API returned false status.");
-                        }
+    const fileName = `xalman_upload${fileExt}`;
 
-                } catch (err) {
-                        console.error("ImgBB Error:", err);
-                        api.setMessageReaction("❌", event.messageID, () => {}, true);
-                        return message.reply(getLang("error", err.message));
-                }
-        }
+    try {
+      api.setMessageReaction("🕑", messageID, () => {}, true);
+
+      const githubLink =
+        "https://raw.githubusercontent.com/goatbotnx/Sexy-nx2.0Updated/refs/heads/main/nx-apis.json";
+      const configRes = await axios.get(githubLink);
+      const apiBaseUrl = configRes.data.imgbb;
+
+      if (!apiBaseUrl) throw new Error("ImgBB API URL not found.");
+
+      const finalEndpoint = `${apiBaseUrl.replace(/\/$/, "")}/upload`;
+
+      const imageRes = await axios.get(imageUrl, {
+        responseType: "arraybuffer"
+      });
+
+      const buffer = Buffer.from(imageRes.data);
+
+      const form = new FormData();
+      form.append("image", buffer, { filename: fileName });
+
+      const response = await axios.post(finalEndpoint, form, {
+        headers: form.getHeaders(),
+        timeout: 60000
+      });
+
+      if (response.data?.url) {
+        api.setMessageReaction("✅", messageID, () => {}, true);
+        return message.reply(
+          `${response.data.url}`
+        );
+      }
+
+      throw new Error("Upload failed.");
+
+    } catch (error) {
+      api.setMessageReaction("❌", messageID, () => {}, true);
+      return message.reply(`⚠️ Error:\n${error.message}`);
+    }
+  }
 };

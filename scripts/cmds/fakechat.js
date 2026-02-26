@@ -2,108 +2,78 @@ const axios = require("axios");
 const fs = require("fs");
 const path = require("path");
 
-const mahmud = async () => {
-        const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
-        return base.data.mahmud;
+const mahmhd = async () => {
+  const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/exe/main/baseApiUrl.json");
+  return base.data.mahmud;
 };
 
 module.exports = {
-        config: {
-                name: "fakechat",
-                aliases: ["fc", "fake", "ফেকচ্যাট"],
-                version: "1.7",
-                author: "MahMUD",
-                countDown: 5,
-                role: 0,
-                description: {
-                        bn: "কাউকে দিয়ে ফেক চ্যাট মেসেজ তৈরি করুন",
-                        en: "Generate a fake chat message for someone",
-                        vi: "Tạo tin nhắn trò chuyện giả cho ai đó"
-                },
-                category: "fun",
-                guide: {
-                        bn: '   {pn} <@tag/reply> <text>: ফেক মেসেজ তৈরি করুন'
-                                + '\n   {pn} <uid> <text>: UID দিয়ে তৈরি করুন',
-                        en: '   {pn} <@tag/reply> <text>: Create fake chat'
-                                + '\n   {pn} <uid> <text>: Create via UID',
-                        vi: '   {pn} <@tag/reply> <văn bản>: Tạo trò chuyện giả'
-                                + '\n   {pn} <uid> <văn bản>: Tạo qua UID'
-                }
-        },
+  config: {
+    name: "fakechat",
+    aliases: ["fc", "F", "fake"],
+    version: "1.7",
+    author: "MahMUD",
+    role: 0,
+    category: "fun",
+    description: "Generate fake chat via reply, mention, or user uid",
+    countDown: 5,
+  },
 
-        langs: {
-                bn: {
-                        noTarget: "× বেবি, কাউকে মেনশন দাও, রিপ্লাই করো অথবা UID দাও! 🗨️",
-                        noText: "× বেবি, চ্যাটে কি লিখবে সেই টেক্সট তো দাও! ✍️",
-                        success: "🗨️ Fake chat generated for: %1",
-                        error: "× সমস্যা হয়েছে: %1। প্রয়োজনে Contact MahMUD।"
-                },
-                en: {
-                        noTarget: "× Baby, please reply, mention, or provide user UID! 🗨️",
-                        noText: "× Baby, please provide the text for the fake chat! ✍️",
-                        success: "🗨️ Fake chat generated for: %1",
-                        error: "× API error: %1. Contact MahMUD for help."
-                },
-                vi: {
-                        noTarget: "× Cưng ơi, vui lòng phản hồi, gắn thẻ hoặc cung cấp UID! 🗨️",
-                        noText: "× Cưng ơi, vui lòng nhập nội dung tin nhắn giả! ✍️",
-                        success: "🗨️ Đã tạo đoạn chat giả cho: %1",
-                        error: "× Lỗi: %1. Liên hệ MahMUD để hỗ trợ."
-                }
-        },
+  onStart: async ({ event, message, args, usersData, api }) => {
+    const obfuscatedAuthor = String.fromCharCode(77, 97, 104, 77, 85, 68); // "MahMUD"
+    if (module.exports.config.author !== obfuscatedAuthor) {
+      return api.sendMessage(
+        "❌ | You are not authorized to change the author name.",
+        event.threadID,
+        event.messageID
+      );
+    }
 
-        onStart: async function ({ api, event, args, message, usersData, getLang }) {
-                const authorName = String.fromCharCode(77, 97, 104, 77, 85, 68);
-                if (this.config.author !== authorName) {
-                        return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
-                }
+    try {
+      let targetId;
+      let userText = args.join(" ").trim();
 
-                try {
-                        const { mentions, messageReply } = event;
-                        let targetId;
-                        let userText = args.join(" ").trim();
+      if (event.messageReply) {
+        targetId = event.messageReply.senderID || event.messageReply.sender?.id;
+      } else if (event.mentions && Object.keys(event.mentions).length > 0) {
+        targetId = Object.keys(event.mentions)[0];
+        const mentionName = event.mentions[targetId];
+        userText = args.join(" ").replace(new RegExp(`@?${mentionName}`, "gi"), "").trim();
+      } else if (args.length > 0 && /^\d+$/.test(args[0])) {
+        targetId = args[0];
+        userText = args.slice(1).join(" ").trim();
+      } else {
+        return message.reply("❌ Please reply, mention, or provide user uid.");
+      }
 
-                        if (messageReply) {
-                                targetId = messageReply.senderID;
-                        } else if (Object.keys(mentions).length > 0) {
-                                targetId = Object.keys(mentions)[0];
-                                const mentionName = mentions[targetId];
-                                userText = args.join(" ").replace(new RegExp(`@?${mentionName}`, "gi"), "").trim();
-                        } else if (args.length > 0 && /^\d+$/.test(args[0])) {
-                                targetId = args[0];
-                                userText = args.slice(1).join(" ").trim();
-                        }
+      if (!userText) return message.reply("❌ Please provide the text for the fake chat.");
 
-                        if (!targetId) return message.reply(getLang("noTarget"));
-                        if (!userText) return message.reply(getLang("noText"));
+      let userName = "Unknown";
+      try {
+        userName = (await usersData.getName(targetId)) || targetId;
+      } catch {
+        userName = targetId;
+      }
 
-                        let userName = "Unknown";
-                        try {
-                                userName = (await usersData.getName(targetId)) || targetId;
-                        } catch {
-                                userName = targetId;
-                        }
+      const baseApi = await mahmhd();
+      const apiUrl = `${baseApi}/api/fakechat?id=${targetId}&name=${encodeURIComponent(
+        userName
+      )}&text=${encodeURIComponent(userText)}`;
 
-                        const baseUrl = await mahmud();
-                        const apiUrl = `${baseUrl}/api/fakechat?id=${targetId}&name=${encodeURIComponent(userName)}&text=${encodeURIComponent(userText)}`;
+      const response = await axios.get(apiUrl, { responseType: "arraybuffer" });
+      const filePath = path.join(__dirname, `fakechat_${Date.now()}.png`);
+      fs.writeFileSync(filePath, Buffer.from(response.data, "binary"));
 
-                        const cacheDir = path.join(__dirname, "cache");
-                        if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir);
-                        const filePath = path.join(cacheDir, `fakechat_${Date.now()}.png`);
+      await message.reply({
+        body: `🗨️ Fake chat generated for: ${userName}`,
+        attachment: fs.createReadStream(filePath),
+      });
 
-                        const response = await axios.get(apiUrl, { responseType: "arraybuffer" });
-                        fs.writeFileSync(filePath, Buffer.from(response.data, "binary"));
-
-                        return message.reply({
-                                body: getLang("success", userName),
-                                attachment: fs.createReadStream(filePath)
-                        }, () => {
-                                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-                        });
-
-                } catch (err) {
-                        console.error("Fakechat Error:", err);
-                        return message.reply(getLang("error", err.message));
-                }
-        }
+      setTimeout(() => {
+        try { fs.unlinkSync(filePath); } catch {}
+      }, 5000);
+    } catch {
+      await message.reply("🥹error.");
+    }
+  },
 };

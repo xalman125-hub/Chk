@@ -1,95 +1,73 @@
 const axios = require("axios");
 
-const mahmud = async () => {
-        const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
-        return base.data.mahmud;
-};
-
 module.exports = {
-        config: {
-                name: "ai",
-                version: "1.7",
-                author: "MahMUD",
-                countDown: 5,
-                role: 0,
-                description: {
-                        bn: "এআই এর সাথে সরাসরি কথা বলুন",
-                        en: "Chat directly with AI",
-                        vi: "Trò chuyện trực tiếp với AI"
-                },
-                category: "ai",
-                guide: {
-                        bn: '   {pn} <প্রশ্ন>: যেকোনো কিছু জিজ্ঞাসা করুন\n   (রিপ্লাই দিয়ে কথা চালিয়ে যেতে পারেন)',
-                        en: '   {pn} <question>: Ask anything to AI\n   (Reply to continue the chat)',
-                        vi: '   {pn} <câu hỏi>: Hỏi bất cứ điều gì với AI\n   (Phản hồi để tiếp tục trò chuyện)'
-                }
-        },
+  config: {
+    name: "ai",
+    aliases: ["nxai", "aichat"],
+    version: "3.0",
+    role: 0,
+    author: "xalman",
+    description: "any question ask ai",
+    category: "ai",
+    countDown: 3
+  },
 
-        langs: {
-                bn: {
-                        noPrompt: "⚠️ বেবি, কিছু তো জিজ্ঞাসা করো! উদাহরণ: {pn} তুমি কে?",
-                        noResponse: "× এআই থেকে কোনো উত্তর পাওয়া যায়নি।",
-                        error: "× সমস্যা হয়েছে: %1। প্রয়োজনে Contact MahMUD।"
-                },
-                en: {
-                        noPrompt: "⚠️ Baby, please provide a question! Example: {pn} Who are you?",
-                        noResponse: "× Sorry, I couldn't generate a response.",
-                        error: "× API error: %1. Contact MahMUD for help."
-                },
-                vi: {
-                        noPrompt: "⚠️ Cưng ơi, hãy đặt câu hỏi! Ví dụ: {pn} Bạn là ai?",
-                        noResponse: "× Xin lỗi, tôi không thể tạo phản hồi.",
-                        error: "× Lỗi: %1. Liên hệ MahMUD để được hỗ trợ."
-                }
-        },
+  onStart: async function ({ api, event, args }) {
+    const { threadID, messageID } = event;
+    const query = args.join(" ").trim();
 
-        onStart: async function ({ api, event, args, message, getLang }) {
-                const authorName = String.fromCharCode(77, 97, 104, 77, 85, 68);
-                if (this.config.author !== authorName) {
-                        return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
-                }
+    if (!query) return;
 
-                const query = args.join(" ");
-                if (!query) return message.reply(getLang("noPrompt"));
+    return await handleAIRequest(api, event, query, []);
+  },
 
-                return await handleAI(api, event, query, this.config.name, getLang);
-        },
+  onReply: async function ({ api, event, Reply }) {
+    const { body } = event;
 
-        onReply: async function ({ api, event, Reply, args, getLang }) {
-                if (Reply.author !== event.senderID) return;
+    if (!Reply || !Reply.lastAnswer) return;
 
-                const prompt = args.join(" ");
-                if (!prompt) return;
+    const history = Reply.history || [];
+    history.push({ role: "assistant", content: Reply.lastAnswer });
 
-                return await handleAI(api, event, prompt, this.config.name, getLang);
-        }
+    return await handleAIRequest(api, event, body.trim(), history);
+  }
 };
 
-async function handleAI(api, event, query, commandName, getLang) {
-        try {
-                const baseUrl = await mahmud();
-                const apiUrl = `${baseUrl}/api/ai`;
+async function handleAIRequest(api, event, query, history) {
+  const { threadID, messageID, senderID } = event;
 
-                const response = await axios.post(
-                        apiUrl,
-                        { question: query },
-                        { headers: { "Content-Type": "application/json" } }
-                );
+  try {
+    const apiConfig = await axios.get("https://raw.githubusercontent.com/goatbotnx/Sexy-nx2.0Updated/refs/heads/main/nx-apis.json");
+    const baseURL = apiConfig.data.chat;
+    const finalURL = baseURL.endsWith("/") ? `${baseURL}aichat` : `${baseURL}/aichat`;
 
-                const replyText = response.data.response || getLang("noResponse");
+    const res = await axios.post(finalURL, {
+      query: query,
+      history: history
+    });
 
-                api.sendMessage(replyText, event.threadID, (error, info) => {
-                        if (!error) {
-                                global.GoatBot.onReply.set(info.messageID, {
-                                        commandName: commandName,
-                                        author: event.senderID,
-                                        messageID: info.messageID
-                                });
-                        }
-                }, event.messageID);
+    const answer = res.data?.result;
 
-        } catch (err) {
-                console.error("AI Error:", err);
-                api.sendMessage(getLang("error", err.message), event.threadID, event.messageID);
-        }
+    if (!answer) {
+      return api.sendMessage("No response from AI server.", threadID, messageID);
+    }
+
+    api.sendMessage(answer, threadID, (err, info) => {
+      if (err) return;
+
+      if (!global.client) global.client = {};
+      if (!global.client.handleReply) global.client.handleReply = [];
+
+      global.client.handleReply.push({
+        name: module.exports.config.name,
+        messageID: info.messageID,
+        author: senderID,
+        lastAnswer: answer,
+        history: [...history, { role: "user", content: query }]
+      });
+    }, messageID);
+
+  } catch (error) {
+    api.sendMessage("Server is not responding right now.", threadID, messageID);
+  }
 }

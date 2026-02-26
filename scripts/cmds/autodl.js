@@ -1,104 +1,114 @@
-const axios = require("axios");
-const fs = require("fs-extra");
-const path = require("path");
-
-const mahmud = async () => {
-        const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
-        return base.data.mahmud;
-};
+const axios = require('axios');
 
 module.exports = {
-        config: {
-                name: "autodl",
-                version: "1.7",
-                author: "MahMUD",
-                countDown: 0,
-                role: 0,
-                category: "media",
-                description: {
-                        en: "Automatically download videos from supported links",
-                        bn: "সাপোর্টেড লিঙ্ক থেকে স্বয়ংক্রিয়ভাবে ভিডিও ডাউনলোড করুন",
-                        vi: "Tự động tải video từ các liên kết được hỗ trợ"
-                },
-                guide: {
-                        en: "[just send the video link]",
-                        bn: "[শুধুমাত্র ভিডিও লিঙ্কটি পাঠান]",
-                        vi: "[chỉ cần gửi liên kết video]"
-                }
+  config: {
+    name: "alldl",
+    version: "10.0",
+    author: "xalman",
+    countDown: 3,
+    role: 0,
+    shortDescription: "Ultra Fast Multi-Source Downloader",
+    longDescription: "Download videos with automatic retry and stream fix.",
+    category: "media",
+    guide: "{pn} <link> or just send the link"
+  },
+
+  onStart: async function ({ api, event, args, message }) {
+    const url = args[0];
+    if (!url) return message.reply("⚠️ দয়া করে একটি ভিডিও লিঙ্ক দিন!");
+    return await this.handleDownload(url, api, event, message);
+  },
+
+  onChat: async function ({ api, event, message }) {
+    const { body, senderID } = event;
+    if (!body || senderID === api.getCurrentUserID()) return;
+
+    const linkRegEx = /(https?:\/\/[^\s]+)/g;
+    const match = body.match(linkRegEx);
+
+    if (match) {
+      const url = match[0];
+      const sites = ["tiktok.com", "facebook.com", "fb.watch", "instagram.com", "reels", "youtube.com", "youtu.be", "pinterest.com", "pin.it", "twitter.com", "x.com", "capcut.com"];
+      
+      if (sites.some(s => url.includes(s))) {
+        return await this.handleDownload(url, api, event, message);
+      }
+    }
+  },
+
+  handleDownload: async function (url, api, event, message) {
+    const { messageID } = event;
+    const start = Date.now();
+
+    try {
+      if (api.setMessageReaction) api.setMessageReaction("⌛", messageID, () => {}, true);
+
+      let videoUrl, title, source = "Unknown";
+
+
+      if (url.includes("tiktok.com")) {
+        try {
+          const tikRes = await axios.get(`https://api.tiklydown.eu.org/api/download?url=${encodeURIComponent(url)}`);
+          videoUrl = tikRes.data.video.noWatermark || tikRes.data.video.watermark;
+          title = tikRes.data.title;
+          source = "TikTok";
+        } catch (e) {}
+      }
+
+      if (!videoUrl && url.includes("tiktok.com")) {
+        try {
+          const res = await axios.get(`https://tikwm.com/api/?url=${encodeURIComponent(url)}`);
+          videoUrl = res.data.data.play;
+          title = res.data.data.title;
+          source = "TikTok";
+        } catch (e) {}
+      }
+
+
+      if (!videoUrl) {
+        try {
+          const configRes = await axios.get("https://raw.githubusercontent.com/goatbotnx/Sexy-nx2.0Updated/refs/heads/main/nx-apis.json");
+          const apiUrl = configRes.data.autodl;
+          const res = await axios.get(`${apiUrl}/download?url=${encodeURIComponent(url)}`);
+          if (res.data && res.data.success) {
+            videoUrl = res.data.data.video_url || res.data.data.nowatermark || res.data.data.hd;
+            title = res.data.data.title;
+            source = res.data.data.source || "Social Media";
+          }
+        } catch (e) {}
+      }
+
+      if (!videoUrl) throw new Error("Could not fetch video from any API.");
+      
+      const stream = await axios.get(videoUrl, { 
+        responseType: 'stream',
+        headers: { 
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+          'Accept': '*/*'
         },
+        timeout: 60000 
+      });
 
-        langs: {
-                bn: {
-                        error: "❌ An error occurred: contact MahMUD %1",
-                        success: "• 𝐏𝐥𝐚𝐭𝐟𝐨𝐫𝐦: %1\n• 𝐇𝐞𝐫𝐞'𝐬 𝐲𝐨𝐮𝐫 𝐯𝐢𝐝𝐞𝐨 𝐛𝐚𝐛𝐲 <😘"
-                },
-                en: {
-                        error: "❌ An error occurred: contact MahMUD %1",
-                        success: "• 𝐏𝐥𝐚𝐭𝐟𝐨𝐫𝐦: %1\n• 𝐇𝐞𝐫𝐞'𝐬 𝐲𝐨𝐮𝐫 𝐯𝐢𝐝𝐞𝐨 𝐛𝐚𝐛𝐲 <😘"
-                },
-                vi: {
-                        error: "❌ An error occurred: contact MahMUD %1",
-                        success: "• 𝐏𝐥𝐚𝐭𝐟𝐨𝐫𝐦: %1\n• 𝐇𝐞𝐫𝐞'𝐬 𝐲𝐨𝐮𝐫 𝐯𝐢𝐝𝐞𝐨 𝐛𝐚𝐛𝐲 <😘"
-                }
-        },
+      const time = ((Date.now() - start) / 1000).toFixed(2);
+      const xalmanBody = 
+        `『 𝗗𝗢𝗪𝗡𝗟𝗢𝗔𝗗𝗘𝗥 』\n` +
+        `━━━━━━━━━━━━━━━━━━\n` +
+        `📝 𝗧𝗶𝘁𝗹𝗲: ${title || "No Title"}\n` +
+        `🌐 𝗣𝗹𝗮𝘁𝗳𝗼𝗿𝗺: ${source.toUpperCase()}\n` +
+        `⏱️ 𝗧𝗶𝗺𝗲: ${time}s\n` +
+        `👨‍💻 Dev: xalman` +
+        `━━━━━━━━━━━━━━━━━━`;
 
-        onStart: async function () {},
-        onChat: async function ({ api, event, getLang }) {
-                const authorName = String.fromCharCode(77, 97, 104, 77, 85, 68);
-                if (this.config.author !== authorName) {
-                        return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
-                }
+      await message.reply({
+        body: xalmanBody,
+        attachment: stream.data
+      });
 
-                if (!event.body) return;
-                const supportedSites = /https?:\/\/(www\.)?(vt\.tiktok\.com|tiktok\.com|facebook\.com|fb\.watch|instagram\.com|youtu\.be|youtube\.com|x\.com|twitter\.com|vm\.tiktok\.com)/gi;
-                
-                if (supportedSites.test(event.body)) {
-                        const links = event.body.match(/https?:\/\/\S+/gi);
-                        if (!links) return;
-                        const link = links[0];
+      if (api.setMessageReaction) api.setMessageReaction("✅", messageID, () => {}, true);
 
-                        let platform = "𝚄𝚗𝚔𝚗𝚘𝚠𝚗";
-                        if (link.includes("facebook.com") || link.includes("fb.watch")) platform = "𝐅𝐚𝐜𝐞𝐛𝐨𝐨𝐤";
-                        else if (link.includes("instagram.com")) platform = "𝐈𝐧𝐬𝐭𝐚𝐠𝐫𝐚𝐦";
-                        else if (link.includes("tiktok.com")) platform = "𝐓𝐢𝐤𝐓𝐨𝐤";
-                        else if (link.includes("youtube.com") || link.includes("youtu.be")) platform = "𝐘𝐨𝐮𝐓𝐮𝐛𝐞";
-                        else if (link.includes("x.com") || link.includes("twitter.com")) platform = "𝐗 (𝐓𝐰𝐢𝐭𝐭𝐞𝐫)";
-
-                        const cacheDir = path.join(__dirname, "cache");
-                        const filePath = path.join(cacheDir, `autodl_${Date.now()}.mp4`);
-
-                        try {
-                                api.setMessageReaction("⏳", event.messageID, () => { }, true);
-                                if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
-
-                                const base = await mahmud();
-                                const apiUrl = `${base}/api/download/video?link=${encodeURIComponent(link)}`;
-                                
-                                const response = await axios({
-                                        method: 'get',
-                                        url: apiUrl,
-                                        responseType: 'arraybuffer',
-                                        headers: {
-                                                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36'
-                                        }
-                                });
-
-                                fs.writeFileSync(filePath, Buffer.from(response.data));
-                                if (fs.statSync(filePath).size < 1000) throw new Error("Invalid video data.");
-                                api.setMessageReaction("🪽", event.messageID, () => { }, true);
-                                 
-                                return api.sendMessage({
-                                        body: getLang("success", platform),
-                                        attachment: fs.createReadStream(filePath)
-                                }, event.threadID, () => {
-                                        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-                                }, event.messageID);
-
-                        } catch (err) {
-                                console.error("autodl error:", err.message);
-                                api.setMessageReaction("❌", event.messageID, () => { }, true);
-                                if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-                        }
-                }
-        }
+    } catch (e) {
+      console.error("Download Error:", e.message);
+      if (api.setMessageReaction) api.setMessageReaction("❌", messageID, () => {}, true);
+    }
+  }
 };

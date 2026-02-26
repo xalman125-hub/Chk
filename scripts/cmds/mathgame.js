@@ -1,99 +1,168 @@
-const axios = require("axios");
-
-const getBaseApi = async () => {
-  const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
-  return base.data.mahmud;
-};
-
 module.exports = {
   config: {
     name: "mathgame",
     aliases: ["math"],
-    version: "1.7",
-    author: "MahMUD",
+    version: "6.0",
+    author: "xalman",
     role: 0,
-    category: "game",
-    guide: {
-      en: "{pn}"
-    }
+    category: "game"
   },
 
-  onStart: async function ({ api, event, usersData }) {
-    const obfuscatedAuthor = String.fromCharCode(77, 97, 104, 77, 85, 68); 
-    if (module.exports.config.author !== obfuscatedAuthor) {
-      return api.sendMessage("❌ You are not authorized to change the author name.", event.threadID, event.messageID);
+  onStart: async function ({ event, args, message, usersData }) {
+    const axios = require("axios");
+    const uid = event.senderID;
+
+    if (!args[0]) {
+      return message.reply(
+`🧮 MATH GAME GUIDE
+────────────
+📌 Usage:
+➤ /mathgame easy
+➤ /mathgame medium
+➤ /mathgame hard
+➤ /math easy
+
+🎮 Rules:
+• সঠিক উত্তর: +300 Coins, +100 XP
+• ভুল উত্তর: -100 Coins
+
+⏱ সময়: 60 সেকেন্ড`
+      );
     }
 
-    const { senderID, threadID, messageID } = event;
+    const level = args[0].toLowerCase();
+    if (!["easy", "medium", "hard"].includes(level)) {
+      return message.reply(
+`⚠️ Invalid Level!
 
-    let quiz;
+✔ Use only:
+• easy
+• medium
+• hard`
+      );
+    }
+
+    const now = Date.now();
+    const ONE_HOUR = 60 * 60 * 1000;
+
+    const userData = await usersData.get(uid) || {};
+    let mathHistory = userData.mathHistory || [];
+
+    mathHistory = mathHistory.filter(t => now - t < ONE_HOUR);
+
+    if (mathHistory.length >= 30) {
+      const oldest = mathHistory[0];
+      const remainingMs = (oldest + ONE_HOUR) - now;
+      const remainingMin = Math.ceil(remainingMs / 60000);
+
+      return message.reply(
+`⛔ Hourly Limit Reached
+────────────
+🎮 Played: 30 / 30
+⏳ Try again in ${remainingMin} minute(s)`
+      );
+    }
+
+    mathHistory.push(now);
+    await usersData.set(uid, { ...userData, mathHistory });
+
     try {
-      const apiUrl = await getBaseApi();
-      const res = await axios.get(`${apiUrl}/api/math`);
-      const apiData = res.data;
-      quiz = apiData?.data || apiData;
+      const cfg = await axios.get(
+        "https://raw.githubusercontent.com/goatbotnx/Sexy-nx2.0Updated/refs/heads/main/nx-apis.json"
+      );
 
-      if (!quiz || !quiz.question || !quiz.options || !quiz.correctAnswer) {
-        return api.sendMessage("❌ No valid quiz found from API.", threadID, messageID);
-      }
-    } catch (err) {
-      return api.sendMessage("error, contact MahMUD.", threadID, messageID);
-    }
+      const baseUrl = cfg.data.math;
+      const res = await axios.get(`${baseUrl}/api/game?level=${level}`);
 
-    const { question, correctAnswer, options } = quiz;
-    const { a, b, c, d } = options;
+      const { question, answer, options } = res.data;
+      const correctIndex = options.indexOf(answer) + 1;
 
-    const quizMsg = {
-      body: `\n╭──✦ ${question}\n├‣ 𝗔) ${a}\n├‣ 𝗕) ${b}\n├‣ 𝗖) ${c}\n├‣ 𝗗) ${d}\n╰──────────────────‣\n𝐑𝐞𝐩𝐥𝐲 𝐰𝐢𝐭𝐡 𝐲𝐨𝐮𝐫 𝐚𝐧𝐬𝐰𝐞𝐫.`
-    };
+      const optText = options.map((o, i) => ` ${i + 1}. ${o}`).join("\n");
 
-    api.sendMessage(quizMsg, threadID, (err, info) => {
-      global.GoatBot.onReply.set(info.messageID, {
-        type: "mathquiz",
-        commandName: "mathgame",
-        author: senderID,
-        messageID: info.messageID,
-        correctAnswer,
-        answered: false
+      const quizMsg =
+`🧮 MATH QUIZ (${level.toUpperCase()})
+────────────
+❓ ${question} = ?
+
+${optText}
+
+⏱ Time: 60 seconds
+✏️ Reply 1-4 only`;
+
+      message.reply(quizMsg, (err, info) => {
+        if (err) return;
+
+        const timeout = setTimeout(() => {
+          message.unsend(info.messageID);
+          global.GoatBot.onReply.delete(info.messageID);
+        }, 60 * 1000);
+
+        // ✅ FIXED (Alias + Main name both work)
+        global.GoatBot.onReply.set(info.messageID, {
+          commandName: this.config.name,
+          author: uid,
+          correctIndex,
+          answer,
+          quizMsgID: info.messageID,
+          timeout
+        });
       });
-    }, messageID);
+
+    } catch (err) {
+      console.error(err);
+      message.reply("⚠️ Failed to load quiz.");
+    }
   },
 
-  onReply: async function ({ event, api, Reply, usersData }) {
-    const { correctAnswer, author } = Reply;
+  onReply: async function ({ event, Reply, message, usersData }) {
+    if (!Reply) return;
 
-    if (event.senderID !== author)
-      return api.sendMessage("❌ This isn't your math quiz!", event.threadID, event.messageID);
+    const { author, correctIndex, answer, quizMsgID, timeout } = Reply;
 
-    if (Reply.answered)
-      return api.sendMessage("❌ You've already answered this quiz!", event.threadID, event.messageID);
+    if (event.senderID !== author) return;
 
-    Reply.answered = true;
+    clearTimeout(timeout);
 
-    const reply = event.body.trim().toLowerCase();
-    const correctAns = correctAnswer.toLowerCase();
+    const userReply = event.body.trim();
+    const userData = await usersData.get(author) || {};
 
-    const userData = await usersData.get(author);
-    const rewardCoins = 500;
-    const rewardExp = 121;
+    try {
+      await message.unsend(quizMsgID);
+    } catch {}
 
-    await api.unsendMessage(Reply.messageID);
-    if (reply === correctAns) {
-      userData.money += rewardCoins;
-      userData.exp += rewardExp;
-      await usersData.set(author, userData);
+    try {
+      await message.unsend(event.messageID);
+    } catch {}
 
-      return api.sendMessage(
-        `✅ | Correct answer baby\nYou earned +${rewardCoins} coins & +${rewardExp} exp!`,
-        event.threadID,
-        event.messageID
+    if (userReply == correctIndex) {
+
+      await usersData.set(author, {
+        ...userData,
+        money: (userData.money || 0) + 300,
+        exp: (userData.exp || 0) + 100
+      });
+
+      message.reply(
+`✅ Correct Answer!
+🎯 ${answer}
+💰 +300 Coins
+⭐ +100 XP`
       );
-    } else {
-      return api.sendMessage(
-        `❌ | Wrong answer baby\nThe Correct answer was: ${correctAnswer}`,
-        event.threadID,
-        event.messageID
+
+    } else if (["1","2","3","4"].includes(userReply)) {
+
+      await usersData.set(author, {
+        ...userData,
+        money: Math.max((userData.money || 0) - 100, 0)
+      });
+
+      message.reply(
+`❌ Wrong Answer!
+✔ Correct: ${answer}
+💸 -100 Coins`
       );
     }
+
+    global.GoatBot.onReply.delete(quizMsgID);
   }
 };

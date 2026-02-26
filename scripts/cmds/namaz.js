@@ -1,83 +1,57 @@
-const axios = require("axios");
-
-const baseApiUrl = async () => {
-        const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
-        return base.data.mahmud;
-};
+const axios = require('axios');
 
 module.exports = {
-        config: {
-                name: "namaz",
-                aliases: ["prayer", "salah", "নামাজ"],
-                version: "1.7",
-                author: "MahMUD",
-                countDown: 5,
-                role: 0,
-                description: {
-                        bn: "আপনার শহরের নামাজের সময়সূচী জানুন",
-                        en: "Get prayer times for your city",
-                        vi: "Xem thời gian cầu nguyện cho thành phố của bạn"
-                },
-                category: "Islamic",
-                guide: {
-                        bn: '   {pn} <শহরের নাম>: (যেমন: {pn} Dhaka)',
-                        en: '   {pn} <city>: (Ex: {pn} Dhaka)',
-                        vi: '   {pn} <thành phố>: (VD: {pn} Dhaka)'
-                }
-        },
+  config: {
+    name: "namaz",
+    aliases: ["prayer", "namaj"],
+    version: "1.0",
+    author: "xalman",
+    countDown: 5,
+    role: 0,
+    shortDescription: "Get prayer times based on city",
+    longDescription: "Get real-time Islamic prayer times (Fajr, Dhuhr, Asr, Maghrib, Isha) for any city.",
+    category: "Islamic",
+    guide: "{pn} [city_name]"
+  },
 
-        langs: {
-                bn: {
-                        noData: "× দুঃখিত বেবি, %1 শহরের নামাজের সময় পাওয়া যায়নি। 🕌",
-                        error: "× সমস্যা হয়েছে: %1। প্রয়োজনে Contact MahMUD।"
-                },
-                en: {
-                        noData: "× Sorry baby, prayer times for %1 were not found. 🕌",
-                        error: "× API error: %1. Contact MahMUD for help."
-                },
-                vi: {
-                        noData: "× Xin lỗi cưng, không tìm thấy thời gian cầu nguyện cho %1. 🕌",
-                        error: "× Lỗi: %1. Liên hệ MahMUD để hỗ trợ."
-                }
-        },
+  onStart: async ({ api, event, args }) => {
+    const { threadID, messageID } = event;
+    const city = args.join(" ") || "Dhaka";
 
-        onStart: async function ({ api, event, args, message, getLang }) {
-                const authorName = String.fromCharCode(77, 97, 104, 77, 85, 68);
-                if (this.config.author !== authorName) {
-                        return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
-                }
-
-                const city = args.join(" ") || "Dhaka";
-
-                try {
-                        
-                        api.setMessageReaction("⏳", event.messageID, () => {}, true);
-
-                        const baseUrl = await baseApiUrl();
-                        const apiUrl = `${baseUrl}/api/namaz/font3/${encodeURIComponent(city)}`;
-
-                        const response = await axios.get(apiUrl, {
-                                headers: { "author": authorName }
-                        });
-
-                        if (response.data?.error) {
-                                api.setMessageReaction("❌", event.messageID, () => {}, true);
-                                return message.reply(response.data.error);
-                        }
-
-                        if (response.data?.message) {
-                                api.setMessageReaction("✅", event.messageID, () => {}, true);
-                                return message.reply(response.data.message);
-                        }
-
-                        api.setMessageReaction("❓", event.messageID, () => {}, true);
-                        return message.reply(getLang("noData", city));
-
-                } catch (err) {
-                        console.error("Namaz Error:", err);
-                        api.setMessageReaction("❌", event.messageID, () => {}, true);
-                        const errorMsg = err.response?.data?.error || err.message;
-                        return message.reply(getLang("error", errorMsg));
-                }
+    try {
+      const res = await axios.get(`http://api.aladhan.com/v1/timingsByCity`, {
+        params: {
+          city: city,
+          country: "Bangladesh",
+          method: 1 
         }
+      });
+
+      const { timings, date } = res.data.data;
+
+      const infoMsg = `┏━━━━━✦ 🕌 ✦━━━━━┓
+    Namaj Timings
+┗━━━━━━━━━━━━━━━┛
+
+📍 City: ${city.toUpperCase()}
+📅 Date: ${date.readable}
+🕋 Hijri: ${date.hijri.date}
+
+━━━━━━━━━━━━━━━━
+✨ Fajr    : ${timings.Fajr}
+☀️ Sunrise : ${timings.Sunrise}
+中午 Dhuhr   : ${timings.Dhuhr}
+☁️ Asr     : ${timings.Asr}
+🌅 Maghrib : ${timings.Maghrib}
+🌙 Isha    : ${timings.Isha}
+━━━━━━━━━━━━━━━━
+
+"Perform prayer, for it restrains from shameful and unjust deeds." 🤲`;
+
+      return api.sendMessage(infoMsg, threadID, messageID);
+
+    } catch (error) {
+      return api.sendMessage(`❌ Information for '${city}' not found. Please type the city name correctly in English (e.g., !prayer Dhaka)`, threadID, messageID);
+    }
+  }
 };
