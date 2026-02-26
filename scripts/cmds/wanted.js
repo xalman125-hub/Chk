@@ -1,50 +1,66 @@
 const axios = require("axios");
-const fs = require("fs");
+const DIG = require("discord-image-generation");
+const fs = require("fs-extra");
 const path = require("path");
-
-const baseApiUrl = async () => {
-  const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
-  return base.data.mahmud;
-};
-
-/**
-* @author MahMUD
-* @author: do not delete it
-*/
 
 module.exports = {
   config: {
     name: "wanted",
-    version: "1.7",
-    author: "MahMUD",
+    version: "1.0.0",
+    author: "Xalman",
+    countDown: 5,
     role: 0,
+    shortDescription: "Wanted poster generation",
+    longDescription: "Create a Wanted poster with user avatar",
     category: "fun",
-    cooldown: 10,
-    guide: "wanted [mention-reply-UID]",
+    guide: {
+      en: "{pn} [@mention / reply / UID]"
+    }
   },
 
   onStart: async function ({ api, event, args }) {
-    const obfuscatedAuthor = String.fromCharCode(77,97,104,77,85,68);
-    if (module.exports.config.author !== obfuscatedAuthor)
-      return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
+    const { threadID, messageID, mentions, type, messageReply, senderID } = event;
+    let targetID;
 
-    const { threadID, messageID, messageReply, mentions } = event;
-    let id2 = messageReply?.senderID || Object.keys(mentions)[0] || args[0];
-    if (!id2) return api.sendMessage("Mention, reply, or provide UID of the target.", threadID, messageID);
+    if (type === "message_reply") {
+      targetID = messageReply.senderID;
+    } else if (Object.keys(mentions).length > 0) {
+      targetID = Object.keys(mentions)[0];
+    } else if (args.length > 0 && !isNaN(args[0])) {
+      targetID = args[0];
+    } else {
+      targetID = senderID;
+    }
 
     try {
-      const url = `${await baseApiUrl()}/api/dig?type=wanted&user=${id2}`;
-      const img = await axios.get(url, { responseType: "arraybuffer" });
-      const file = path.join(__dirname, `wanted_${id2}.png`);
-      fs.writeFileSync(file, img.data);
+      const info = await api.getUserInfo(targetID);
+      const name = info[targetID].name;
 
-      api.sendMessage({
-        body: "Effect wanted successful 🕵️",
-        attachment: fs.createReadStream(file)
-      }, threadID, () => fs.unlinkSync(file), messageID);
+      api.sendMessage(``, threadID, messageID);
 
-    } catch {
-      api.sendMessage("🥹 Error, contact MahMUD.", threadID, messageID);
+      const avatarURL = `https://graph.facebook.com/${targetID}/picture?width=512&height=512&access_token=6628568379%7Cc1e620fa708a1d5696fb991c1bde5662`;
+      
+      const avatarRes = await axios.get(avatarURL, { responseType: 'arraybuffer' });
+      const avatarBuffer = Buffer.from(avatarRes.data, 'utf-8');
+
+      const img = await new DIG.Wanted().getImage(avatarBuffer, "$");
+      
+      const cacheDir = path.join(__dirname, 'cache');
+      if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+      const pathSave = path.join(cacheDir, `wanted_${targetID}.png`);
+
+      fs.writeFileSync(pathSave, Buffer.from(img));
+
+      return api.sendMessage({
+        body: ``,
+        attachment: fs.createReadStream(pathSave)
+      }, threadID, () => {
+        if (fs.existsSync(pathSave)) fs.unlinkSync(pathSave);
+      }, messageID);
+
+    } catch (error) {
+      console.error(error);
+      return api.sendMessage("Wanted poster error ❌", threadID, messageID);
     }
   }
 };

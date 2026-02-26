@@ -1,106 +1,212 @@
 const axios = require("axios");
 const fs = require("fs-extra");
 const path = require("path");
-
-const mahmud = async () => {
-        const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
-        return base.data.mahmud;
-};
+const { createCanvas, loadImage } = require("canvas");
 
 module.exports = {
-        config: {
-                name: "pin",
-                aliases: ["pinterest", "pic"],
-                version: "1.7",
-                author: "MahMUD",
-                countDown: 10,
-                role: 0,
-                description: {
-                        bn: "পিন্টারেস্ট থেকে যেকোনো ছবি সার্চ করে ডাউনলোড করুন",
-                        en: "Search and download images from Pinterest",
-                        vi: "Tìm kiếm và tải xuống hình ảnh từ Pinterest"
-                },
-                category: "image gen",
-                guide: {
-                        bn: '   {pn} <নাম> - <পরিমাণ>: (যেমন: {pn} goku - 10)',
-                        en: '   {pn} <query> - <amount>: (Ex: {pn} goku - 10)',
-                        vi: '   {pn} <từ khóa> - <số lượng>: (VD: {pn} goku - 10)'
-                }
-        },
+  config: {
+    name: "pinterest",
+    aliases: ["pin"],
+    version: "10.0",
+    author: "xalman",
+    role: 0,
+    countDown: 5,
+    description: "Search Pinterest images and reply number to get full image",
+    category: "image"
+  },
 
-        langs: {
-                bn: {
-                        noInput: "× বেবি, কী ছবি খুঁজছো? নাম ও পরিমাণ দাও! 🔍\nউদাহরণ: {pn} goku - 10",
-                        noData: "× দুঃখিত, আপনার সার্চ অনুযায়ী কোনো ছবি পাওয়া যায়নি।",
-                        success: "✅ | আপনার জন্য \"%1\" এর %2টি ছবি এখানে রয়েছে:",
-                        error: "× সমস্যা হয়েছে: %1। প্রয়োজনে Contact MahMUD।"
-                },
-                en: {
-                        noInput: "× Baby, please enter a search query and amount! 🔍\nExample: {pn} goku - 10",
-                        noData: "× Sorry, no images found for your query.",
-                        success: "✅ | Here are your %2 images for \"%1\":",
-                        error: "× API error: %1. Contact MahMUD for help."
-                },
-                vi: {
-                        noInput: "× Cưng ơi, hãy nhập từ khóa và số lượng! 🔍\nVD: {pn} goku - 10",
-                        noData: "× Rất tiếc, không tìm thấy hình ảnh nào.",
-                        success: "✅ | Đây là %2 hình ảnh cho \"%1\":",
-                        error: "× Lỗi: %1. Liên hệ MahMUD để hỗ trợ."
-                }
-        },
+  onStart: async function ({ api, event, args }) {
+    const query = args.join(" ");
+    if (!query)
+      return api.sendMessage("Write something. Example: /pin cat", event.threadID);
 
-        onStart: async function ({ api, event, args, message, getLang }) {
-                const authorName = String.fromCharCode(77, 97, 104, 77, 85, 68);
-                if (this.config.author !== authorName) {
-                        return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
-                }
+    api.setMessageReaction("🕑", event.messageID, () => {}, true);
 
-                const queryAndLength = args.join(" ").split("-");
-                const keySearch = queryAndLength[0]?.trim();
-                const count = queryAndLength[1]?.trim();
-                const numberSearch = count ? Math.min(parseInt(count), 20) : 6;
+    try {
+      const githubRaw = "https://raw.githubusercontent.com/goatbotnx/Sexy-nx2.0Updated/main/nx-apis.json";
+      const apiList = await axios.get(githubRaw);
+      const baseUrl = apiList.data.pin;
 
-                if (!keySearch) return message.reply(getLang("noInput"));
+      const res = await axios.get(
+        `${baseUrl}/search-img?query=${encodeURIComponent(query)}&type=json`
+      );
 
-                const cacheDir = path.join(__dirname, "cache");
-                if (!fs.existsSync(cacheDir)) fs.mkdirSync(cacheDir, { recursive: true });
+      const data = res.data?.data || [];
 
-                try {
-                        api.setMessageReaction("⏳", event.messageID, () => {}, true);
+      if (!data.length) {
+        api.setMessageReaction("❌", event.messageID, () => {}, true);
+        return api.sendMessage("No image found!", event.threadID);
+      }
 
-                        const apiUrl = await mahmud();
-                        const response = await axios.get(
-                                `${apiUrl}/api/pin/mahmud?query=${encodeURIComponent(keySearch)}&limit=${numberSearch}`
-                        );
+      const images = data.slice(0, 30);
 
-                        const data = response.data.images;
-                        if (!data || data.length === 0) {
-                                api.setMessageReaction("❌", event.messageID, () => {}, true);
-                                return message.reply(getLang("noData"));
-                        }
+      await sendGrid({ api, event, images, page: 0, query });
 
-                        const attachments = [];
-                        for (let i = 0; i < data.length; i++) {
-                                const imgRes = await axios.get(data[i], { responseType: "arraybuffer" });
-                                const imgPath = path.join(cacheDir, `pin_${Date.now()}_${i}.jpg`);
-                                await fs.outputFile(imgPath, imgRes.data);
-                                attachments.push(fs.createReadStream(imgPath));
-                        }
+      api.setMessageReaction("✅", event.messageID, () => {}, true);
 
-                        await message.reply({
-                                body: getLang("success", keySearch, attachments.length),
-                                attachment: attachments
-                        }, () => {
-                                api.setMessageReaction("✅", event.messageID, () => {}, true);
-                                attachments.forEach(att => {
-                                        if (fs.existsSync(att.path)) fs.unlinkSync(att.path);
-                                });
-                        });
+    } catch (err) {
+      console.log(err);
+      api.setMessageReaction("❌", event.messageID, () => {}, true);
+      return api.sendMessage("API Error!", event.threadID);
+    }
+  },
 
-                } catch (err) {
-                        console.error("Pinterest Error:", err);
-                        api.setMessageReaction("❌", event.messageID, () => {}, true);
-                        return message.reply(getLang("error", err.message));
-                }
-        }
+  onReply: async function ({ api, event, Reply }) {
+    const { images, page, query } = Reply;
+    const input = event.body.trim().toLowerCase();
+
+    if (input === "next") {
+      api.setMessageReaction("🕑", event.messageID, () => {}, true);
+
+      const nextPage = page + 1;
+      if (nextPage * 10 >= images.length)
+        return api.sendMessage("No more pages!", event.threadID);
+
+      await sendGrid({ api, event, images, page: nextPage, query });
+
+      api.setMessageReaction("✅", event.messageID, () => {}, true);
+      return;
+    }
+
+    const num = parseInt(input);
+    if (!isNaN(num) && num >= 1 && num <= 10) {
+      api.setMessageReaction("🕑", event.messageID, () => {}, true);
+
+      const index = page * 10 + (num - 1);
+      if (!images[index])
+        return api.sendMessage("Image not found!", event.threadID);
+
+      try {
+        const stream = await axios.get(images[index], {
+          responseType: "stream",
+          headers: {
+            "User-Agent": "Mozilla/5.0"
+          }
+        });
+
+        await api.sendMessage({
+          body: `📌 ${query} (${num})`,
+          attachment: stream.data
+        }, event.threadID);
+
+        api.setMessageReaction("✅", event.messageID, () => {}, true);
+      } catch (e) {
+        api.sendMessage("Failed to fetch image!", event.threadID);
+      }
+    }
+  }
 };
+
+async function sendGrid({ api, event, images, page, query }) {
+
+  const start = page * 10;
+  const slice = images.slice(start, start + 10);
+
+  const columns = 3;
+  const gap = 25;
+  const columnWidth = 350;
+
+  let columnHeights = Array(columns).fill(160);
+  const loadedImages = [];
+
+  for (let url of slice) {
+    try {
+      const response = await axios.get(url, {
+        responseType: "arraybuffer",
+        headers: { "User-Agent": "Mozilla/5.0" }
+      });
+
+      const img = await loadImage(Buffer.from(response.data));
+      const ratio = img.height / img.width;
+      const newHeight = columnWidth * ratio;
+
+      loadedImages.push({ img, height: newHeight });
+    } catch (e) {}
+  }
+
+  for (let item of loadedImages) {
+    const shortest = columnHeights.indexOf(Math.min(...columnHeights));
+    columnHeights[shortest] += item.height + gap;
+  }
+
+  const canvasHeight = Math.max(...columnHeights) + 120;
+  const canvasWidth = columns * columnWidth + (columns + 1) * gap;
+
+  const canvas = createCanvas(canvasWidth, canvasHeight);
+  const ctx = canvas.getContext("2d");
+
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+
+  ctx.fillStyle = "#111";
+  ctx.font = "bold 38px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText(query.toUpperCase(), canvasWidth / 2, 60);
+
+  ctx.fillStyle = "#666";
+  ctx.font = "22px Arial";
+  ctx.fillText(`Page ${page + 1}`, canvasWidth / 2, 100);
+
+  columnHeights = Array(columns).fill(160);
+
+  for (let i = 0; i < loadedImages.length; i++) {
+
+    const shortest = columnHeights.indexOf(Math.min(...columnHeights));
+    const x = gap + shortest * (columnWidth + gap);
+    const y = columnHeights[shortest];
+
+    const { img, height } = loadedImages[i];
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(x + 18, y);
+    ctx.lineTo(x + columnWidth - 18, y);
+    ctx.quadraticCurveTo(x + columnWidth, y, x + columnWidth, y + 18);
+    ctx.lineTo(x + columnWidth, y + height - 18);
+    ctx.quadraticCurveTo(x + columnWidth, y + height, x + columnWidth - 18, y + height);
+    ctx.lineTo(x + 18, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - 18);
+    ctx.lineTo(x, y + 18);
+    ctx.quadraticCurveTo(x, y, x + 18, y);
+    ctx.closePath();
+    ctx.clip();
+    ctx.drawImage(img, x, y, columnWidth, height);
+    ctx.restore();
+
+    ctx.beginPath();
+    ctx.arc(x + 28, y + 28, 18, 0, Math.PI * 2);
+    ctx.fillStyle = "#e60023";
+    ctx.fill();
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "bold 18px Arial";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(i + 1, x + 28, y + 28);
+
+    columnHeights[shortest] += height + gap;
+  }
+
+  ctx.fillStyle = "#999";
+  ctx.font = "20px Arial";
+  ctx.textAlign = "center";
+  ctx.fillText("powered by xalman", canvasWidth / 2, canvasHeight - 40);
+
+  const filePath = path.join(__dirname, "cache", `grid_${Date.now()}.png`);
+  fs.ensureDirSync(path.dirname(filePath));
+  fs.writeFileSync(filePath, canvas.toBuffer("image/png"));
+
+  const msg = await api.sendMessage({
+    body: `📌 ${query}\nReply:\n• next ➜ Next Page\n• reply number ➜ Full Image`,
+    attachment: fs.createReadStream(filePath)
+  }, event.threadID);
+
+  fs.unlinkSync(filePath);
+
+  global.GoatBot.onReply.set(msg.messageID, {
+    commandName: "pinterest",
+    images,
+    page,
+    query
+  });
+}

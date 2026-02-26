@@ -1,121 +1,97 @@
 const axios = require("axios");
 
-const mahmud = async () => {
-        const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
-        return base.data.mahmud;
-};
-
 module.exports = {
-        config: {
-                name: "quiz",
-                aliases: ["qz"],
-                version: "1.7",
-                author: "MahMUD",
-                countDown: 10,
-                role: 0,
-                description: {
-                        bn: "সাধারণ জ্ঞান কুইজ খেলে কয়েন এবং এক্সপি জিতুন",
-                        en: "Play general knowledge quiz to win coins and exp",
-                        vi: "Chơi trò chơi đố vui kiến thức để giành được xu và exp"
-                },
-                category: "game",
-                guide: {
-                        bn: '   {pn} en: ইংরেজি কুইজ\n   {pn} bn: বাংলা কুইজ',
-                        en: '   {pn} en: English quiz\n   {pn} bn: Bangla quiz',
-                        vi: '   {pn} en: Câu đố tiếng Anh\n   {pn} bn: Câu đố tiếng Bengal'
-                }
-        },
+  config: {
+    name: "quiz",
+    aliases: ["qz"],
+    version: "4.6",
+    author: "xalman",
+    countDown: 5,
+    role: 0,
+    description: "Play a random quiz from an external API",
+    category: "games",
+    guide: "Type {pn} to start or {pn} list to see total questions"
+  },
 
-        langs: {
-                bn: {
-                        reply: "𝐑𝐞𝐩𝐥𝐲 𝐰𝐢𝐭𝐡 𝐲𝐨𝐮𝐫 𝐚𝐧𝐬𝐰𝐞𝐫.",
-                        correct: "✅ | একদম সঠিক উত্তর বেবি!\n\nতুমি জিতেছো %1 কয়েন এবং %2 এক্সপি।",
-                        wrong: "❌ | উত্তরটি ভুল হয়েছে বেবি!\n\nসঠিক উত্তর ছিল: %1",
-                        notYour: "× বেবি, এটি তোমার কুইজ নয়! নিজের জন্য শুরু করো। >🐸",
-                        error: "× সমস্যা হয়েছে: %1। প্রয়োজনে Contact MahMUD।"
-                },
-                en: {
-                        reply: "𝐑𝐞𝐩𝐥𝐲 𝐰𝐢𝐭𝐡 𝐲𝐨𝐮𝐫 𝐚𝐧𝐬𝐰𝐞𝐫.",
-                        correct: "✅ | Correct answer baby!\n\nYou earned %1 coins & %2 exp.",
-                        wrong: "❌ | Wrong answer baby!\n\nThe correct answer was: %1",
-                        notYour: "𝐓𝐡𝐢𝐬 𝐢𝐬 𝐧𝐨𝐭 𝐲𝐨𝐮𝐫 𝐪𝐮𝐢𝐳 𝐛𝐚𝐛𝐲 >🐸",
-                        error: "× API error: %1. Contact MahMUD for help."
-                },
-                vi: {
-                        reply: "Trả lời bằng đáp án của bạn đi cưng",
-                        correct: "✅ | Đáp án chính xác cưng ơi!\n\nBạn nhận được %1 xu & %2 exp.",
-                        wrong: "❌ | Sai rồi cưng ơi!\n\n💡 Đáp án đúng là: %1",
-                        notYour: "× Đây không phải câu đố của bạn cưng à! >🐸",
-                        error: "× Lỗi: %1. Liên hệ MahMUD để được hỗ trợ."
-                }
-        },
+  onStart: async function ({ event, message, args }) {
+    const { senderID } = event;
+    const RAW_LINK = "https://raw.githubusercontent.com/goatbotnx/Sexy-nx2.0Updated/refs/heads/main/nx-apis.json";
 
-        onStart: async function ({ api, event, args, getLang }) {
-                const authorName = String.fromCharCode(77, 97, 104, 77, 85, 68); 
-                if (this.config.author !== authorName) {
-                        return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
-                }
-                
-                try {
-                        const input = args.join("").toLowerCase();
-                        const category = input === "en" || input === "english" ? "english" : "bangla";
+    try {
+      const rawRes = await axios.get(RAW_LINK);
+      const API_URL = rawRes.data.quiz;
+      
+      const res = await axios.get(`${API_URL}/mcq`);
+      const questions = res.data;
 
-                        const apiUrl = await mahmud();
-                        const res = await axios.get(`${apiUrl}/api/quiz?category=${category}`);
-                        const quiz = res.data;
+      if (args[0] === "list") {
+        return message.reply(`📊 *QUIZ STATISTICS*\n━━━━━━━━━━━━━━━\n🔹 Total Questions: ${questions.length}\n━━━━━━━━━━━━━━━\n💡 Type /quiz to play.`);
+      }
 
-                        if (!quiz) return api.sendMessage("× No quiz available baby.", event.threadID, event.messageID);
+      const quiz = questions[Math.floor(Math.random() * questions.length)];
 
-                        const { question, correctAnswer, options } = quiz;
-                        const { a, b, c, d } = options;
+      const msgText = `📝 *Question:* ${quiz.question}\n\n` +
+                  `🅰️ ${quiz.options.A}\n` +
+                  `🅱️ ${quiz.options.B}\n` +
+                  `©️ ${quiz.options.C}\n` +
+                  `Ⓓ ${quiz.options.D}\n\n` +
+                  `⏳ Reply to this message with the correct option.`;
 
-                        const quizMsg = `\n╭──✦ ${question}\n`
-                                + `├‣ 𝗔) ${a}\n`
-                                + `├‣ 𝗕) ${b}\n`
-                                + `├‣ 𝗖) ${c}\n`
-                                + `├‣ 𝗗) ${d}\n`
-                                + `╰──────────────────‣\n`
-                                + `${getLang("reply")}`;
+      return message.reply(msgText, (err, info) => {
+        if (err) return;
+        global.GoatBot.onReply.set(info.messageID, {
+          commandName: this.config.name,
+          messageID: info.messageID,
+          author: senderID,
+          quizID: quiz.id,
+          apiUrl: API_URL
+        });
+      });
 
-                        api.sendMessage(quizMsg, event.threadID, (error, info) => {
-                                global.GoatBot.onReply.set(info.messageID, {
-                                        type: "reply",
-                                        commandName: this.config.name,
-                                        author: event.senderID,
-                                        messageID: info.messageID,
-                                        correctAnswer
-                                });
+    } catch (e) {
+      console.error(e);
+      return message.reply("❌ Failed to fetch data from the server.");
+    }
+  },
 
-                                setTimeout(() => {
-                                        api.unsendMessage(info.messageID);
-                                }, 40000);
-                        }, event.messageID);
+  onReply: async function ({ event, Reply, message, usersData, api }) {
+    const { senderID, body } = event;
 
-                } catch (error) {
-                        api.sendMessage(getLang("error", error.message), event.threadID, event.messageID);
-                }
-        },
+    if (senderID !== Reply.author) {
+      return message.reply("⚠️ This is not your quiz! Type /quiz to start your own.");
+    }
 
-        onReply: async function ({ event, api, Reply, usersData, getLang }) {
-                const { correctAnswer, author } = Reply;
-                if (event.senderID !== author) return api.sendMessage(getLang("notYour"), event.threadID, event.messageID);
+    const userAnswer = body.trim().toUpperCase();
+    const validOptions = ["A", "B", "C", "D"];
 
-                const userReply = event.body.trim().toLowerCase();
-                const userData = await usersData.get(author);
-                const rewardCoins = 500;
-                const rewardExp = 121;
+    if (!validOptions.includes(userAnswer)) return;
 
-                await api.unsendMessage(Reply.messageID);
+    try {
+      const res = await axios.post(`${Reply.apiUrl}/submit`, {
+        userID: senderID,
+        id: Reply.quizID,
+        option: userAnswer
+      });
 
-                if (userReply === correctAnswer.toLowerCase()) {
-                        await usersData.set(author, {
-                                money: userData.money + rewardCoins,
-                                exp: userData.exp + rewardExp,
-                                data: userData.data
-                        });
-                        return api.sendMessage(getLang("correct", rewardCoins, rewardExp), event.threadID, event.messageID);
-                } else {
-                        return api.sendMessage(getLang("wrong", correctAnswer), event.threadID, event.messageID);
-                }
-        }
+      api.unsendMessage(Reply.messageID).catch(() => {});
+      global.GoatBot.onReply.delete(Reply.messageID);
+
+      if (res.data.correct) {
+        const reward = 500;
+        const userData = await usersData.get(senderID);
+        const currentMoney = parseInt(userData.money || "0");
+        const newMoney = currentMoney + reward;
+        
+        await usersData.set(senderID, { money: newMoney.toString() });
+
+        return message.reply(`✅ Correct Answer!\n💰 You received: $${reward}\n🏦 Current Balance: $${newMoney}`);
+      } else {
+        return message.reply(`❌ Wrong Answer!\n📖 The correct answer was: ${res.data.correctOption}`);
+      }
+
+    } catch (e) {
+      console.error(e);
+      return message.reply("❌ Error submitting your answer. Please try again.");
+    }
+  }
 };

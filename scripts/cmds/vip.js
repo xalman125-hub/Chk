@@ -1,85 +1,173 @@
-const { config } = global.GoatBot;
-const { writeFileSync } = require("fs-extra");
+const header = `👑 VIP USER 🫦 👑`;
+
+const fs = require("fs");
+
+const vipFilePath = "vip.json";
+const changelogFilePath = "changelog.json"; // Path to your changelog file
+
+function loadVIPData() {
+	try {
+		const data = fs.readFileSync(vipFilePath);
+		return JSON.parse(data);
+	} catch (err) {
+		console.error("Error loading VIP data:", err);
+		return {};
+	}
+}
+
+function saveVIPData(data) {
+	try {
+		fs.writeFileSync(vipFilePath, JSON.stringify(data, null, 2));
+	} catch (err) {
+		console.error("Error saving VIP data:", err);
+	}
+}
+
+function loadChangelog() {
+	try {
+		const data = fs.readFileSync(changelogFilePath);
+		return JSON.parse(data);
+	} catch (err) {
+		console.error("Error loading changelog data:", err);
+		return {};
+	}
+}
 
 module.exports = {
-        config: {
-                name: "vip",
-                version: "1.7",
-                author: "MahMUD",
-                countDown: 5,
-                role: 2,
-                description: {
-                        bn: "VIP ইউজার যোগ, অপসারণ বা তালিকা দেখুন",
-                        en: "Add, remove, or list VIP users"
-                },
-                category: "owner",
-                guide: { bn: '{pn} add/remove/list [ID/@tag]', en: '{pn} add/remove/list [ID/@tag]' }
-        },
+	config: {
+		name: "vip",
+		version: "1.0", // Updated version to 1.0
+		author: "xalman",
+		role: 2,
+		category: "Config",
+		guide: {
+			en: "!vip add <uid> - Add a user to the VIP list\n!vip rm <uid> - Remove a user from the VIP list\n!vip list - List VIP users\n!vip changelog - View the changelog",
+		},
+	},
 
-        langs: {
-                bn: {
-                        added: "🌟 | সফলভাবে %1 জনকে VIP রোল দেওয়া হয়েছে:\n%2",
-                        already: "\n⚠️ | %1 জন আগে থেকেই VIP ছিল:\n%2",
-                        missingAdd: "⚠️ | বেবি, VIP করতে আইডি দিন অথবা ট্যাগ করুন!",
-                        removed: "🚫 | সফলভাবে %1 জনের VIP রোল সরানো হয়েছে:\n%2",
-                        notIn: "⚠️ | %1 জন VIP তালিকায় ছিল না:\n%2",
-                        list: "🌟 | VIP ইউজার তালিকা:\n\n%1"
-                },
-                en: {
-                        added: "🌟 | Added VIP role for %1 users:\n%2",
-                        already: "\n⚠️ | %1 users already have VIP role:\n%2",
-                        missingAdd: "⚠️ | Provide ID or tag to add VIP!",
-                        removed: "🚫 | Removed VIP role for %1 users:\n%2",
-                        notIn: "⚠️ | %1 users were not in VIP list:\n%2",
-                        list: "🌟 | VIP Users List:\n\n%1"
-                }
-        },
+	onStart: async function ({ api, event, args, message, usersData }) {
+		const subcommand = args[0];
 
-        onStart: async function ({ api, message, args, usersData, event, getLang }) {
-                const action = args[0]?.toLowerCase();
-                const { threadID, messageID } = event;
-                if (!config.vipUser) config.vipUser = [];
+		if (!subcommand) {
+			return;
+		}
 
-                switch (action) {
-                        case "add": {
-                                if (args[1] || event.messageReply) {
-                                        let uids = Object.keys(event.mentions).length > 0 ? Object.keys(event.mentions) : 
-                                                   event.messageReply ? [event.messageReply.senderID] : args.filter(arg => !isNaN(arg));
+		// Load VIP data from the JSON file
+		let vipData = loadVIPData();
 
-                                        const notInIds = [], inIds = [];
-                                        for (const uid of uids) config.vipUser.includes(uid) ? inIds.push(uid) : notInIds.push(uid);
+		if (subcommand === "add") {
+			const uidToAdd = args[1];
+			if (uidToAdd) {
+				const userData = await usersData.get(uidToAdd);
+				if (userData) {
+					const userName = userData.name || "Unknown User";
+					// Send a message to the added VIP user
+					message.reply(`${header}
+${userName} (${uidToAdd}) has been successfully added to the VIP list.`);
+					api.sendMessage(`${header}
+Congratulations ${userName}! (${uidToAdd}), you have been added to the VIP list. Enjoy the VIP Features!!!`, uidToAdd);
+					// Send a message to all VIP users
+					Object.keys(vipData).forEach(async (uid) => {
+						if (uid !== uidToAdd) {
+							const vipUserData = await usersData.get(uid);
+							if (vipUserData) {
+								const vipUserName = vipUserData.name || "Unknown User";
+								api.sendMessage(`${header}
+Hello VIP Users! Let's welcome our new VIP user!
+Name: ${userName} (${uidToAdd})
+You can use vipnoti command if you want to send something to them!`, uid);
+							}
+						}
+					});
+					// Update the VIP data and save it
+					vipData[uidToAdd] = true;
+					saveVIPData(vipData);
+				} else {
+					message.reply(`${header}
+User with UID ${uidToAdd} not found.`);
+				}
+			} else {
+				message.reply(`${header}
+Please provide a UID to add to the VIP list.`);
+			}
+		} else if (subcommand === "rm") {
+			const uidToRemove = args[1];
+			if (uidToRemove && vipData[uidToRemove]) {
+				delete vipData[uidToRemove];
+				saveVIPData(vipData);
+				const userData = await usersData.get(uidToRemove);
+				if (userData) {
+					const userName = userData.name || "Unknown User";
+					message.reply(`${header}
+${userName} (${uidToRemove}) has been successfully removed from the VIP list.`);
+					// Send a message to the removed VIP user
+					api.sendMessage(`${header}
+Sorry ${userName} (${uidToRemove}), you have been removed from the VIP list.`, uidToRemove);
+					// Send a message to all VIP users
+					Object.keys(vipData).forEach(async (uid) => {
+						if (uid !== uidToRemove) {
+							const vipUserData = await usersData.get(uid);
+							if (vipUserData) {
+								const vipUserName = vipUserData.name || "Unknown User";
+								api.sendMessage(`${header}
+Hello VIP Users, our user ${userName} (${uidToRemove}) has been removed from VIP.`, uid);
+							}
+						}
+					});
+				} else {
+					message.reply(`${header}
+User with UID ${uidToRemove} not found.`);
+				}
+			} else {
+				message.reply(`${header}
+Please provide a valid UID to remove from the VIP list.`);
+			}
+		} else if (subcommand === "list") {
+			const vipList = await Promise.all(Object.keys(vipData).map(async (uid) => {
+				const userData = await usersData.get(uid);
+				if (userData) {
+					const userName = userData.name || "Unknown User";
+					return `• ${userName} (${uid})`;
+				} else {
+					return `• Unknown User (${uid})`;
+				}
+			}));
 
-                                        config.vipUser.push(...notInIds);
-                                        const getNames = await Promise.all(uids.map(uid => usersData.getName(uid).then(name => ({ uid, name }))));
-                                        writeFileSync(global.client.dirConfig, JSON.stringify(config, null, 2));
+			if (vipList.length > 0) {
+				message.reply(`${header}
 
-                                        const response = (notInIds.length > 0 ? getLang("added", notInIds.length, getNames.filter(u => notInIds.includes(u.uid)).map(({ uid, name }) => `• ${name} (${uid})`).join("\n")) : "")
-                                                + (inIds.length > 0 ? getLang("already", inIds.length, getNames.filter(u => inIds.includes(u.uid)).map(({ uid, name }) => `• ${name} (${uid})`).join("\n")) : "");
-                                        return api.sendMessage(response, threadID, messageID);
-                                } else return api.sendMessage(getLang("missingAdd"), threadID, messageID);
-                        }
-                        case "remove": {
-                                if (args[1] || event.messageReply) {
-                                        let uids = Object.keys(event.mentions).length > 0 ? Object.keys(event.mentions) : 
-                                                   event.messageReply ? [event.messageReply.senderID] : args.filter(arg => !isNaN(arg));
+» Our respected VIP Users:
 
-                                        const inIds = [], notInIds = [];
-                                        for (const uid of uids) config.vipUser.includes(uid) ? inIds.push(uid) : notInIds.push(uid);
+${vipList.join(`
+`) } 
 
-                                        for (const uid of inIds) config.vipUser.splice(config.vipUser.indexOf(uid), 1);
-                                        const getNames = await Promise.all(uids.map(uid => usersData.getName(uid).then(name => ({ uid, name }))));
-                                        writeFileSync(global.client.dirConfig, JSON.stringify(config, null, 2));
+Use !vip add/del <uid> to add or remove participants.`);
+			} else {
+				message.reply(`${header}
+The VIP list is currently empty.`);
+			}
+		} else if (subcommand === "changelog") {
+			// Display the changelog data
+			const changelogData = loadChangelog();
 
-                                        const response = (inIds.length > 0 ? getLang("removed", inIds.length, getNames.filter(u => inIds.includes(u.uid)).map(({ uid, name }) => `• ${name} (${uid})`).join("\n")) : "")
-                                                + (notInIds.length > 0 ? getLang("notIn", notInIds.length, getNames.filter(u => notInIds.includes(u.uid)).map(({ uid, name }) => `• ${name} (${uid})`).join("\n")) : "");
-                                        return api.sendMessage(response, threadID, messageID);
-                                } else return api.sendMessage(getLang("missingAdd"), threadID, messageID);
-                        }
-                        case "list": {
-                                const getNames = await Promise.all(config.vipUser.map(uid => usersData.getName(uid).then(name => ({ uid, name }))));
-                                return api.sendMessage(getLang("list", getNames.map(({ uid, name }) => `• ${name}\n  └ ID: ${uid}`).join("\n\n")), threadID, messageID);
-                        }
-                        default: return message.SyntaxError();
-                }
-        }
+			if (changelogData) {
+				const changelogEntries = Object.keys(changelogData).filter((version) => parseFloat(version) >= 1.0);
+
+				if (changelogEntries.length > 0) {
+					const changelogText = changelogEntries.map((version) => `Version ${version}: ${changelogData[version]}`).join('\n');
+					message.reply(`${header}
+Current Version: ${module.exports.config.version}
+Changelog:
+${changelogText}`);
+				} else {
+					message.reply(`${header}
+Current Version: ${module.exports.config.version}
+Changelog:
+No changelog entries found starting from version 1.0.`);
+				}
+			} else {
+				message.reply("Changelog data not available.");
+			}
+		}
+	}
 };

@@ -1,80 +1,44 @@
-const axios = require("axios");
-
-const baseApiUrl = async () => {
-        const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
-        return base.data.mahmud;
-};
+const axios = require('axios');
 
 module.exports = {
-        config: {
-                name: "ss",
-                version: "1.7",
-                author: "MahMUD",
-                role: 0,
-                description: {
-                        en: "Take a screenshot of a website",
-                        bn: "যেকোনো ওয়েবসাইটের স্ক্রিনশট নিন",
-                        vi: "Chụp ảnh màn hình của một trang web"
-                },
-                category: "tools",
-                guide: {
-                        en: "{pn} <link>",
-                        bn: "{pn} <লিঙ্ক>",
-                        vi: "{pn} <link>"
-                },
-                coolDowns: 10,
-        },
+  config: {
+    name: "ss",
+    version: "2.1.0",
+    author: "xalman",
+    countDown: 5,
+    role: 0,
+    description: "Capture website screenshot using GitHub API Config",
+    category: "tools",
+    guide: "{pn} <website_name>"
+  },
 
-        langs: {
-                bn: {
-                        noUrl: "• বেবি, একটি লিঙ্ক (URL) তো দাও! 😘",
-                        error: "❌ An error occurred: contact MahMUD %1",
-                        success: "Here's your screenshot image <😘"
-                },
-                en: {
-                        noUrl: "• Baby, please provide a URL! 😘",
-                        error: "❌ An error occurred: contact MahMUD %1",
-                        success: "Here's your screenshot image <😘"
-                },
-                vi: {
-                        noUrl: "• Cưng ơi, vui lòng cung cấp đường dẫn URL! 😘",
-                        error: "❌ An error occurred: contact MahMUD %1",
-                        success: "Đây là ảnh chụp màn hình của bạn <😘"
-                }
-        },
+  onStart: async function ({ api, event, args }) {
+    const { threadID, messageID } = event;
+    const site = args[0];
+    const jsonURL = "https://raw.githubusercontent.com/goatbotnx/Sexy-nx2.0Updated/refs/heads/main/nx-apis.json";
 
-        onStart: async function ({ api, event, args, getLang }) {
-                const authorName = String.fromCharCode(77, 97, 104, 77, 85, 68);
-                if (this.config.author !== authorName) {
-                        return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
-                }
+    if (!site) {
+      return api.sendMessage("❌ Please provide a website name!", threadID, messageID);
+    }
 
-                const { threadID, messageID } = event;
-                const urlInput = args.join(" ");
+    try {
+      const resJSON = await axios.get(jsonURL);
+      const apiBaseURL = resJSON.data.ss; 
 
-                if (!urlInput) return api.sendMessage(getLang("noUrl"), threadID, messageID);
+      if (!apiBaseURL) {
+        throw new Error("API URL not found in JSON (Key: 'ss')");
+      }
 
-                try {
-                        api.setMessageReaction("⏳", messageID, () => { }, true);
+      const finalApiUrl = `${apiBaseURL}/screenshot?url=${encodeURIComponent(site)}`;
+      const stream = await global.utils.getStreamFromURL(finalApiUrl);
+      
+      return api.sendMessage({
+        body: `✅ Screenshot for: ${site}`,
+        attachment: stream
+      }, threadID, messageID);
 
-                        const apiUrlBase = await baseApiUrl();
-                        const finalUrl = `${apiUrlBase}/api/ss?url=${encodeURIComponent(urlInput)}`;
-                        
-                        const attachment = await global.utils.getStreamFromURL(finalUrl);
-                        
-                        api.sendMessage({ 
-                                body: getLang("success"), 
-                                attachment 
-                        }, threadID, (err) => {
-                                if (!err) {
-                                        api.setMessageReaction("🪽", messageID, () => { }, true);
-                                }
-                        }, messageID);
-
-                } catch (error) {
-                        api.setMessageReaction("❌", messageID, () => { }, true);
-                        console.error("SS Error:", error);
-                        api.sendMessage(getLang("error", error.message || "API Error"), threadID, messageID);
-                }
-        }
+    } catch (e) {
+      return api.sendMessage(`❌ Error: ${e.message}`, threadID, messageID);
+    }
+  }
 };

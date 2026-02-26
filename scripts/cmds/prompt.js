@@ -1,82 +1,53 @@
-const axios = require("axios");
-
-const mahmud = async () => {
-        const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
-        return base.data.mahmud;
-};
+const axios = require('axios');
 
 module.exports = {
-        config: {
-                name: "prompt",
-                aliases: ["p"],
-                version: "1.7",
-                author: "MahMUD",
-                countDown: 5,
-                role: 0,
-                description: {
-                        bn: "যেকোনো ছবি থেকে বিস্তারিত প্রম্পট বা বর্ণনা তৈরি করুন",
-                        en: "Generate a detailed prompt or description from any image",
-                        vi: "Tạo lời nhắc hoặc mô tả chi tiết từ bất kỳ hình ảnh nào"
-                },
-                category: "ai",
-                guide: {
-                        bn: '   {pn}: একটি ছবিতে রিপ্লাই দিয়ে ব্যবহার করুন\n   {pn} <প্রশ্ন>: ছবির সাথে প্রশ্নও করতে পারেন',
-                        en: '   {pn}: Reply to an image\n   {pn} <custom prompt>: Ask specific about the image',
-                        vi: '   {pn}: Phản hồi một hình ảnh\n   {pn} <lời nhắc>: Hỏi cụ thể về hình ảnh'
-                }
-        },
+  config: {
+    name: "prompt",
+    aliases: ["p"],
+    version: "3.0",
+    author: "xalman",
+    countDown: 5,
+    role: 0,
+    shortDescription: "Get prompt from image",
+    longDescription: "Reply to an image to get a detailed prompt using dynamic API link from GitHub config.",
+    category: "ai",
+    guide: "{pn} reply to an image"
+  },
 
-        langs: {
-                bn: {
-                        noImg: "× বেবি, একটি ছবিতে রিপ্লাই দিয়ে কমান্ডটি ব্যবহার করো! 🖼️",
-                        error: "× সমস্যা হয়েছে: %1। প্রয়োজনে Contact MahMUD।"
-                },
-                en: {
-                        noImg: "× Baby, please reply to an image to use this command! 🖼️",
-                        error: "× API error: %1. Contact MahMUD for help."
-                },
-                vi: {
-                        noImg: "× Cưng ơi, vui lòng phản hồi một hình ảnh để sử dụng! 🖼️",
-                        error: "× Lỗi: %1. Liên hệ MahMUD để được hỗ trợ."
-                }
-        },
+  onStart: async function ({ api, event }) {
+    const { threadID, messageID, messageReply, type } = event;
 
-        onStart: async function ({ api, event, args, message, getLang }) {
-                const authorName = String.fromCharCode(77, 97, 104, 77, 85, 68);
-                if (this.config.author !== authorName) {
-                        return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
-                }
+    if (type !== "message_reply" || !messageReply.attachments[0] || messageReply.attachments[0].type !== "photo") {
+      return api.sendMessage("Please reply to an image to get a prompt!", threadID, messageID);
+    }
 
-                if (!(event.type === "message_reply" && event.messageReply.attachments[0]?.type === "photo")) {
-                        return message.reply(getLang("noImg"));
-                }
+    const imageUrl = messageReply.attachments[0].url;
+    
+    api.setMessageReaction("⏳", messageID, () => {}, true);
 
-                const prompt = args.join(" ") || "Describe this image in detail";
-                const imageUrl = event.messageReply.attachments[0].url;
+    try {
+      const configRes = await axios.get("https://raw.githubusercontent.com/goatbotnx/Sexy-nx2.0Updated/refs/heads/main/nx-apis.json");
+      const apiBaseUrl = configRes.data.prompt;
 
-                try {
-                        const baseUrl = await mahmud();
-                        const apiUrl = `${baseUrl}/api/prompt`;
+      if (!apiBaseUrl) throw new Error("API Link not found in GitHub config!");
 
-                        const response = await axios.post(apiUrl, {
-                                imageUrl,
-                                prompt
-                        }, {
-                                headers: { 
-                                        "Content-Type": "application/json", 
-                                        "author": authorName 
-                                }
-                        });
+      const response = await axios.post(`${apiBaseUrl}/api/prompt`, {
+        imageUrl: imageUrl
+      });
 
-                        const replyText = response.data.response || response.data.error || "No response";
-                        
-                        message.reply(replyText);
-                        return api.setMessageReaction("🪽", event.messageID, () => {}, true);
+      if (response.data && response.data.prompt) {
+        const result = response.data.prompt;
+        
+        api.setMessageReaction("✅", messageID, () => {}, true);
 
-                } catch (err) {
-                        console.error("Prompt AI Error:", err);
-                        api.setMessageReaction("❌", event.messageID, () => {}, true);
-                        return message.reply(getLang("error", err.message));
-                }
-        }
+        return api.sendMessage(`✨ Generated Prompt ✨\n\n${result}`, threadID, messageID);
+      } else {
+        throw new Error("Invalid response from Prompt API");
+      }
+
+    } catch (error) {
+      api.setMessageReaction("❌", messageID, () => {}, true);
+      return api.sendMessage(`❌ Error: ${error.message}`, threadID, messageID);
+    }
+  }
 };

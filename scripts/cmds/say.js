@@ -1,80 +1,81 @@
 const axios = require("axios");
-
-const baseApiUrl = async () => {
-        const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
-        return base.data.mahmud;
-};
+const fs = require("fs-extra");
+const path = require("path");
 
 module.exports = {
-        config: {
-                name: "say",
-                version: "1.7",
-                author: "MahMUD",
-                countDown: 5,
-                role: 0,
-                description: {
-                        bn: "যেকোনো লেখাকে অডিও বা ভয়েস মেসেজে রূপান্তর করুন",
-                        en: "Convert any text into an audio or voice message",
-                        vi: "Chuyển đổi bất kỳ văn bản nào thành tin nhắn âm thanh hoặc giọng nói"
-                },
-                category: "media",
-                guide: {
-                        bn: '   {pn} <লেখা>: (অথবা কোনো মেসেজে রিপ্লাই দিন)',
-                        en: '   {pn} <text>: (or reply to a message)',
-                        vi: '   {pn} <văn bản>: (hoặc trả lời tin nhắn)'
-                }
-        },
+	config: {
+		name: "say",
+		version: "4.0",
+		author: "xalman",
+		countDown: 5,
+		role: 0,
+		shortDescription: "Reply supported TTS",
+		category: "fun"
+	},
 
-        langs: {
-                bn: {
-                        noInput: "× বেবি, কিছু তো লেখো অথবা মেসেজে রিপ্লাই দাও",
-                        error: "× সমস্যা হয়েছে: %1। প্রয়োজনে Contact MahMUD।"
-                },
-                en: {
-                        noInput: "× Baby, please write something or reply to a message",
-                        error: "× API error: %1. Contact MahMUD for help."
-                },
-                vi: {
-                        noInput: "× Cưng ơi, hãy viết gì đó hoặc phản hồi tin nhắn",
-                        error: "× Lỗi: %1. Liên hệ MahMUD để hỗ trợ."
-                }
-        },
+	onStart: async function ({ message, args, event }) {
 
-        onStart: async function ({ api, event, args, message, getLang }) {
-                const authorName = String.fromCharCode(77, 97, 104, 77, 85, 68);
-                if (this.config.author !== authorName) {
-                        return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
-                }
+		let text;
 
-                let text = args.join(" ");
-                if (event.type === "message_reply" && event.messageReply.body) {
-                        text = event.messageReply.body;
-                }
+		if (event.type === "message_reply" && event.messageReply.body) {
+			text = event.messageReply.body;
+		}
+		else if (args[0]) {
+			text = args.join(" ");
+		}
+		else {
+			return message.reply("⚠️ Please enter text or reply to a message.");
+		}
 
-                if (!text) return message.reply(getLang("noInput"));
+		const maxLength = 180;
+		const parts = [];
+		const cacheDir = path.join(__dirname, "cache");
 
-                try {
-                        api.setMessageReaction("⏳", event.messageID, () => {}, true);
+		for (let i = 0; i < text.length; i += maxLength) {
+			parts.push(text.substring(i, i + maxLength));
+		}
 
-                        const baseUrl = await baseApiUrl();
-                        const response = await axios.get(`${baseUrl}/api/say`, {
-                                params: { text },
-                                headers: { "Author": authorName },
-                                responseType: "stream"
-                        });
+		const attachments = [];
+		const filePaths = [];
 
-                        return message.reply({
-                                body: "",
-                                attachment: response.data
-                        }, () => {
-                                api.setMessageReaction("🪽", event.messageID, () => {}, true);
-                        });
+		try {
+			await fs.ensureDir(cacheDir);
 
-                } catch (err) {
-                        console.error("Say Error:", err);
-                        api.setMessageReaction("❌", event.messageID, () => {}, true);
-                        const errorMsg = err.response?.data?.error || err.message;
-                        return message.reply(getLang("error", errorMsg));
-                }
-        }
+			for (let i = 0; i < parts.length; i++) {
+				const encoded = encodeURIComponent(parts[i]);
+				const url = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encoded}&tl=bn&client=tw-ob`;
+
+				const filePath = path.join(cacheDir, `say_${i}_${Date.now()}.mp3`);
+				filePaths.push(filePath);
+
+				const response = await axios({
+					url,
+					method: "GET",
+					responseType: "stream"
+				});
+
+				const writer = fs.createWriteStream(filePath);
+				response.data.pipe(writer);
+
+				await new Promise((resolve) => writer.on("finish", resolve));
+
+				attachments.push(fs.createReadStream(filePath));
+			}
+
+			await message.reply({
+				body: `🔊 Voice generated (${parts.length} parts)`,
+				attachment: attachments
+			});
+
+			setTimeout(() => {
+				filePaths.forEach(file => {
+					if (fs.existsSync(file)) fs.unlinkSync(file);
+				});
+			}, 5000);
+
+		} catch (err) {
+			console.log(err);
+			return message.reply("❌ Failed to generate voice.");
+		}
+	}
 };

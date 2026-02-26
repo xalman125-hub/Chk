@@ -1,89 +1,83 @@
-const axios = require("axios");
-const fs = require("fs");
-const path = require("path");
+const { createCanvas, loadImage } = require('canvas');
+const fs = require('fs-extra');
+const path = require('path');
+const axios = require('axios');
 
-const baseApiUrl = async () => {
-  const base = await axios.get("https://raw.githubusercontent.com/mahmudx7/HINATA/main/baseApiUrl.json");
-  return base.data.mahmud;
-};
+const ACCESS_TOKEN = "350685531728|62f8ce9f74b12f84c123cc23437a4a32";
 
 module.exports = {
-        config: {
-                name: "slap",
-                aliases: ["thappor"],
-                version: "1.7",
-                author: "MahMUD",
-                countDown: 10,
-                role: 0,
-                description: {
-                        bn: "কাউকে থাপ্পড় মারার ছবি তৈরি করুন",
-                        en: "Create a slap image of someone"
-                },
-                category: "fun",
-                guide: {
-                        bn: '   {pn} <@tag>: কাউকে ট্যাগ করে থাপ্পড় মারুন'
-                                + '\n   {pn} <uid>: UID এর মাধ্যমে থাপ্পড় মারুন'
-                                + '\n   (অথবা কারো মেসেজে রিপ্লাই দিয়ে এটি ব্যবহার করুন)',
-                        en: '   {pn} <@tag>: Slap a tagged user'
-                                + '\n   {pn} <uid>: Slap by UID'
-                                + '\n   (Or reply to someone\'s message)'
-                }
-        },
+  config: {
+    name: "slap",
+    version: "3.0",
+    author: "xalman",
+    countDown: 5,
+    role: 0,
+    shortDescription: "Custom slap image with circular avatars",
+    longDescription: "Custom slap image with your own template and circular avatars",
+    category: "𝗙𝗨𝗡 & 𝗚𝗔𝗠𝗘",
+    guide: { en: "{pn} @tag" }
+  },
 
-        langs: {
-                bn: {
-                        noTarget: "× বেবি, কাকে থাপ্পড় মারবে তাকে মেনশন দাও বা রিপ্লাই করো!",
-                        success: "এই নাও থাপ্পড়! একদম গাল লাল হয়ে গেছে 💥",
-                        error: "× থাপ্পড় মারতে গিয়ে সমস্যা হয়েছে: %1। প্রয়োজনে Contact MahMUD।"
-                },
-                en: {
-                        noTarget: "× Baby, mention or reply to someone to slap!",
-                        success: "Here's a slap! 💥",
-                        error: "× Failed to slap: %1. Contact MahMUD for help."
-                }
-        },
+  langs: {
+    en: { noTag: "যারে থাপড়াবি ওরে মেনশন দে 😒" }
+  },
 
-        onStart: async function ({ api, message, args, event, getLang }) {
-                const authorName = String.fromCharCode(77, 97, 104, 77, 85, 68);
-                if (this.config.author !== authorName) {
-                        return api.sendMessage("You are not authorized to change the author name.", event.threadID, event.messageID);
-                }
+  onStart: async function({ event, message, usersData, getLang }) {
 
-                const { senderID, messageReply, mentions } = event;
-                let id2;
+    const uid1 = event.senderID;
+    const mentions = Object.keys(event.mentions || {});
+    const uid2 = mentions[0];
+    if (!uid2) return message.reply(getLang("noTag"));
 
-                if (messageReply) {
-                        id2 = messageReply.senderID;
-                } else if (Object.keys(mentions).length > 0) {
-                        id2 = Object.keys(mentions)[0];
-                } else if (args[0] && !isNaN(args[0])) {
-                        id2 = args[0];
-                }
+    async function getFbProfilePic(userId, width = 512, height = 512) {
+      const url = `https://graph.facebook.com/${userId}/picture?width=${width}&height=${height}&access_token=${ACCESS_TOKEN}&redirect=false`;
+      try {
+        const res = await axios.get(url);
+        return res.data.data.url;
+      } catch {
+        return null;
+      }
+    }
 
-                if (!id2) return message.reply(getLang("noTarget"));
+    let avatar1 = await getFbProfilePic(uid1) || await usersData.getAvatarUrl(uid1);
+    let avatar2 = await getFbProfilePic(uid2) || await usersData.getAvatarUrl(uid2);
 
-                try {
-                        const baseUrl = await baseApiUrl();
-                        const url = `${baseUrl}/api/dig?type=slap&user=${senderID}&user2=${id2}`;
+    const tmpDir = path.join(__dirname, 'tmp');
+    if (!fs.existsSync(tmpDir)) fs.mkdirSync(tmpDir);
 
-                        const response = await axios.get(url, { responseType: "arraybuffer" });
-                        const cachePath = path.join(__dirname, "cache", `slap_${id2}.png`);
-                        
-                        if (!fs.existsSync(path.join(__dirname, "cache"))) {
-                                fs.mkdirSync(path.join(__dirname, "cache"));
-                        }
+    const templateUrl = "https://i.postimg.cc/pdX3tmTt/xalmanx211.png";
+    const [template, img1, img2] = await Promise.all([
+      loadImage(templateUrl),
+      loadImage(avatar1),
+      loadImage(avatar2)
+    ]);
 
-                        fs.writeFileSync(cachePath, Buffer.from(response.data));
+    const canvas = createCanvas(template.width, template.height);
+    const ctx = canvas.getContext("2d");
 
-                        await message.reply({
-                                body: getLang("success"),
-                                attachment: fs.createReadStream(cachePath)
-                        });
+    ctx.drawImage(template, 0, 0);
 
-                        fs.unlinkSync(cachePath);
-                } catch (err) {
-                        console.error("Error in slap command:", err);
-                        return message.reply(getLang("error", err.message));
-                }
-        }
+    function drawCircleAvatar(ctx, img, x, y, size) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(x + size / 2, y + size / 2, size / 2, 0, Math.PI * 2, true);
+      ctx.closePath();
+      ctx.clip();
+      ctx.drawImage(img, x, y, size, size);
+      ctx.restore();
+    }
+    
+    drawCircleAvatar(ctx, img1, 165, 230, 90);
+    drawCircleAvatar(ctx, img2, 235, 500, 110);
+
+    const filePath = path.join(tmpDir, `slap_${uid1}_${uid2}.png`);
+    fs.writeFileSync(filePath, canvas.toBuffer("image/png"));
+
+    message.reply({
+      body: "👋 thassssshshhhhh!",
+      attachment: fs.createReadStream(filePath)
+    }, () => {
+      try { fs.unlinkSync(filePath); } catch {}
+    });
+  }
 };
